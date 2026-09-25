@@ -102,8 +102,8 @@ body {
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left);
 }
@@ -427,8 +427,6 @@ fieldset {
   padding: 12px 0 14px;
 }
 legend {
-  float: left;
-  width: 100%;
   padding: 0;
   margin-bottom: 8px;
   font: 700 17px/1.2 var(--font-cond);
@@ -562,6 +560,10 @@ input[type='number']:invalid {
 
 /* ---- Responsive ---- */
 @media (max-width: 860px) {
+  .app {
+    height: auto;
+    min-height: 100dvh;
+  }
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -576,6 +578,13 @@ input[type='number']:invalid {
   .file-info {
     order: 3;
     flex-basis: 100%;
+  }
+  .scrubber {
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+  .scrubber input[type='range'] {
+    min-width: 200px;
   }
   .readout {
     font-size: 22px;

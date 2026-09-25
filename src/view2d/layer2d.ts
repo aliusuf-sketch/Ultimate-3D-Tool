@@ -67,7 +67,7 @@ export class LayerView {
 
     // Fit footprint with padding, y up.
     const [W, D] = this.footprint;
-    const pad = 48;
+    const pad = 56;
     const s = Math.min((cw - pad * 2) / Math.max(W, 1e-6), (ch - pad * 2) / Math.max(D, 1e-6));
     const ox = (cw - W * s) / 2;
     const oy = (ch + D * s) / 2;

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "bench": "BENCH=1 vitest run tests/bench.test.ts"
   },
   "dependencies": {
     "jszip": "^3.10.2",
@@ -19,13 +20,17 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^20.19.43",
     "@types/three": "^0.186.0",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
-    "vite": "^8.3.1",
-    "vitest": "^5.0.2"
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }
