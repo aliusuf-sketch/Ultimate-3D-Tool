@@ -23,6 +23,13 @@ Everything runs in your browser. Files are never uploaded, and there is no backe
   - A 3D stack view with orbit controls; the selected layer is highlighted.
   - A 2D layer pattern view showing the current layer, the layer below as a dashed outline, pins, the label, dimensions, and open contours (mesh gaps) in yellow.
 
+## Layout
+
+- **Left: Setup.** One step at a time: _Item → Box → Foam → Fit → Output_ for shipping inserts, or _Model → Layers → Pins → Output_ for the slicer. Rarely needed settings are folded under **More options**.
+- **Centre: the view.** 3D stack or cut pattern, the selected layer, an always-visible **Download ZIP** button, and (shipping) a one-line summary of the fit with any warnings.
+- **Right: Layers** (shipping only). The stack, top first: show/hide, lock or remove layers and play the packing animation.
+- The in/mm switch for shipping inserts is in the top bar.
+
 ## Shipping insert mode
 
 Switch to **Shipping insert** in the top bar to make laser-cut foam packaging that holds a 3D print securely in a box.

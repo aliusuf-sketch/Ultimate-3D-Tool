@@ -84,7 +84,8 @@ export class ShipForm {
 
   private radio(name: string): string {
     return (
-      this.f.form.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? ''
+      // Radios may live outside the form (e.g. the units switch in the top bar).
+      document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? ''
     );
   }
 

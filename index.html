@@ -36,6 +36,22 @@
         </div>
         <div class="file-info" id="fileInfo" aria-live="polite">No model loaded</div>
         <div class="top-actions">
+          <div
+            class="segmented seg-2 units-switch"
+            role="radiogroup"
+            aria-label="Units"
+            data-mode="ship"
+            form="settings"
+          >
+            <label
+              ><input type="radio" name="units" value="in" checked form="settings" /><span
+                >in</span
+              ></label
+            >
+            <label
+              ><input type="radio" name="units" value="mm" form="settings" /><span>mm</span></label
+            >
+          </div>
           <label class="btn btn-primary" for="fileInput">
             Open STL
             <input
@@ -45,7 +61,7 @@
               class="visually-hidden"
             />
           </label>
-          <button class="btn" id="sampleBtn" type="button">Load sample</button>
+          <button class="btn" id="sampleBtn" type="button">Sample</button>
           <button
             class="btn btn-icon"
             id="themeBtn"
@@ -91,26 +107,903 @@
             />
           </symbol>
         </svg>
-        <section class="viewer" aria-label="Model view">
-          <div class="view-tabs" role="tablist" aria-label="View">
-            <button role="tab" id="tab3d" aria-selected="true" aria-controls="viewport">
-              Stack
+
+        <!-- ================= Setup (left) ================= -->
+        <aside class="setup" aria-label="Setup">
+          <nav class="steps" role="tablist" aria-label="Setup steps">
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="item"
+              data-mode="ship"
+              aria-selected="false"
+            >
+              <span class="step-n">1</span>Item
             </button>
-            <button role="tab" id="tab2d" aria-selected="false" aria-controls="viewport">
-              Layer pattern
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="box"
+              data-mode="ship"
+              aria-selected="false"
+            >
+              <span class="step-n">2</span>Box
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="foam"
+              data-mode="ship"
+              aria-selected="false"
+            >
+              <span class="step-n">3</span>Foam
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="fit"
+              data-mode="ship"
+              aria-selected="false"
+            >
+              <span class="step-n">4</span>Fit
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="model"
+              data-mode="slicer"
+              aria-selected="false"
+            >
+              <span class="step-n">1</span>Model
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="layers"
+              data-mode="slicer"
+              aria-selected="false"
+            >
+              <span class="step-n">2</span>Layers
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="pins"
+              data-mode="slicer"
+              aria-selected="false"
+            >
+              <span class="step-n">3</span>Pins
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="output"
+              aria-selected="false"
+            >
+              <span class="step-n step-n-out"></span>Output
+            </button>
+          </nav>
+          <form id="settings" autocomplete="off" novalidate>
+            <!-- ---------- Shipping: 1 Item ---------- -->
+            <section class="step" data-step="item" data-mode="ship">
+              <fieldset data-mode="ship">
+                <legend>Which way up?</legend>
+                <div class="field">
+                  <span class="label" id="upLabel">Model axis pointing up</span>
+                  <div class="segmented" role="radiogroup" aria-labelledby="upLabel">
+                    <label
+                      ><input type="radio" name="shipAxis" value="z" checked /><span>Z</span></label
+                    ><label><input type="radio" name="shipAxis" value="y" /><span>Y</span></label
+                    ><label><input type="radio" name="shipAxis" value="x" /><span>X</span></label>
+                  </div>
+                </div>
+                <div class="checks">
+                  <label class="check"><input type="checkbox" name="turn90" /> Turn 90°</label>
+                  <label class="check"><input type="checkbox" name="flip" /> Upside down</label>
+                </div>
+                <button class="btn btn-small btn-block" type="button" id="autoOrientBtn">
+                  Pick the best orientation for this box
+                </button>
+              </fieldset>
+              <fieldset data-mode="ship">
+                <legend>Size</legend>
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">STL units</span
+                    ><select name="stlUnits">
+                      <option value="1" selected>mm</option>
+                      <option value="10">cm</option>
+                      <option value="25.4">inch</option>
+                    </select></label
+                  >
+                  <label class="field"
+                    ><span class="label">Scale %</span
+                    ><input
+                      type="number"
+                      name="itemScale"
+                      value="100"
+                      step="any"
+                      inputmode="decimal"
+                      min="1"
+                  /></label>
+                </div>
+                <span class="label" id="itemSizeLabel"
+                  >X / Y / Z of the STL (<span class="u">in</span>)</span
+                >
+                <div class="row row-3" role="group" aria-labelledby="itemSizeLabel">
+                  <label class="field"
+                    ><span class="label">X</span
+                    ><input type="number" name="itemX" step="any" inputmode="decimal" min="0.01"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Y</span
+                    ><input type="number" name="itemY" step="any" inputmode="decimal" min="0.01"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Z</span
+                    ><input type="number" name="itemZ" step="any" inputmode="decimal" min="0.01"
+                  /></label>
+                </div>
+                <div class="size-tools">
+                  <label class="check"
+                    ><input type="checkbox" name="itemLock" checked /> Lock proportions</label
+                  >
+                  <button class="btn btn-small" type="button" id="itemResetBtn">
+                    Original size
+                  </button>
+                </div>
+                <p class="hint" id="itemScaleHint">Scale 100 %</p>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="box">
+                Next: Box →
+              </button>
+            </section>
+
+            <!-- ---------- Shipping: 2 Box ---------- -->
+            <section class="step" data-step="box" data-mode="ship">
+              <fieldset data-mode="ship">
+                <legend>Box</legend>
+                <label class="field"
+                  ><span class="label">Size</span
+                  ><select name="boxPreset" id="boxPreset"></select
+                ></label>
+                <div class="row row-3">
+                  <label class="field"
+                    ><span class="label">Length (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxL"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Width (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxW"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Depth (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxH"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                </div>
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Sizes are</span
+                    ><select name="boxMeasure">
+                      <option value="inside" selected>Inside</option>
+                      <option value="outside">Outside</option>
+                    </select></label
+                  >
+                  <label class="field" id="wallField" hidden
+                    ><span class="label">Wall (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxWall"
+                      value="0.125"
+                      min="0"
+                      step="any"
+                      inputmode="decimal"
+                  /></label>
+                </div>
+                <p class="hint hint-top" id="boxInsideHint" hidden></p>
+                <button class="btn btn-small btn-block" type="button" id="smallestBoxBtn">
+                  Find the smallest box that fits
+                </button>
+                <details class="more">
+                  <summary>My boxes</summary>
+                  <div class="save-box">
+                    <input
+                      type="text"
+                      name="boxName"
+                      maxlength="40"
+                      placeholder="Name this box"
+                      aria-label="Custom box name"
+                    />
+                    <button class="btn btn-small" type="button" id="saveBoxBtn">Save</button>
+                    <button class="btn btn-small" type="button" id="deleteBoxBtn" hidden>
+                      Delete
+                    </button>
+                  </div>
+                  <label class="field"
+                    ><span class="label">“Smallest box” searches</span
+                    ><select name="boxSearch">
+                      <option value="all" selected>My boxes + standard sizes</option>
+                      <option value="mine">My boxes only</option>
+                      <option value="standard">Standard sizes only</option>
+                    </select></label
+                  >
+                </details>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="foam">
+                Next: Foam →
+              </button>
+            </section>
+
+            <!-- ---------- Shipping: 3 Foam ---------- -->
+            <section class="step" data-step="foam" data-mode="ship">
+              <fieldset data-mode="ship">
+                <legend>Base &amp; top</legend>
+                <div class="shell-block">
+                  <div class="field">
+                    <span class="label" id="baseModeLabel">Base</span>
+                    <div class="segmented seg-2" role="radiogroup" aria-labelledby="baseModeLabel">
+                      <label
+                        ><input type="radio" name="baseMode" value="closed" checked /><span
+                          >Closed</span
+                        ></label
+                      ><label
+                        ><input type="radio" name="baseMode" value="open" /><span>Open</span></label
+                      >
+                    </div>
+                  </div>
+                  <div class="shell-layers" id="baseLayersUi">
+                    <label class="field"
+                      ><span class="label">Layers</span
+                      ><select name="baseCount">
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                      </select></label
+                    >
+                    <div class="shell-thk">
+                      <span class="label"
+                        >Thickness of each (<span class="u">in</span>), bottom to top</span
+                      >
+                      <div class="shell-thk-inputs">
+                        <label class="field"
+                          ><span class="label">#1</span
+                          ><input
+                            type="number"
+                            name="baseT0"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Base layer 1 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#2</span
+                          ><input
+                            type="number"
+                            name="baseT1"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Base layer 2 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#3</span
+                          ><input
+                            type="number"
+                            name="baseT2"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Base layer 3 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#4</span
+                          ><input
+                            type="number"
+                            name="baseT3"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Base layer 4 thickness"
+                        /></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="shell-block">
+                  <div class="field">
+                    <span class="label" id="topModeLabel">Top</span>
+                    <div class="segmented seg-2" role="radiogroup" aria-labelledby="topModeLabel">
+                      <label
+                        ><input type="radio" name="topMode" value="open" checked /><span
+                          >Open</span
+                        ></label
+                      ><label
+                        ><input type="radio" name="topMode" value="closed" /><span
+                          >Closed</span
+                        ></label
+                      >
+                    </div>
+                  </div>
+                  <div class="shell-layers" id="topLayersUi" hidden>
+                    <label class="field"
+                      ><span class="label">Layers</span
+                      ><select name="topCount">
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                      </select></label
+                    >
+                    <div class="shell-thk">
+                      <span class="label"
+                        >Thickness of each (<span class="u">in</span>), bottom to top</span
+                      >
+                      <div class="shell-thk-inputs">
+                        <label class="field"
+                          ><span class="label">#1</span
+                          ><input
+                            type="number"
+                            name="topT0"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Top layer 1 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#2</span
+                          ><input
+                            type="number"
+                            name="topT1"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Top layer 2 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#3</span
+                          ><input
+                            type="number"
+                            name="topT2"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Top layer 3 thickness" /></label
+                        ><label class="field"
+                          ><span class="label">#4</span
+                          ><input
+                            type="number"
+                            name="topT3"
+                            value="1"
+                            min="0.05"
+                            step="any"
+                            inputmode="decimal"
+                            aria-label="Top layer 4 thickness"
+                        /></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="hint" id="shellHint"></p>
+              </fieldset>
+              <fieldset data-mode="ship">
+                <legend>Foam you can buy</legend>
+                <div class="foam-table" role="group" aria-label="Foam thicknesses">
+                  <span class="label">Use</span
+                  ><span class="label">Thickness (<span class="u">in</span>)</span
+                  ><span class="label">Price / sheet</span>
+                  <input type="checkbox" name="foamOn0" checked aria-label="Use sheet 1" />
+                  <input
+                    type="number"
+                    name="foamT0"
+                    value="0.5"
+                    min="0.01"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Thickness 1"
+                  />
+                  <input
+                    type="number"
+                    name="foamP0"
+                    value="10"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Price 1"
+                  />
+                  <input type="checkbox" name="foamOn1" checked aria-label="Use sheet 2" />
+                  <input
+                    type="number"
+                    name="foamT1"
+                    value="1"
+                    min="0.01"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Thickness 2"
+                  />
+                  <input
+                    type="number"
+                    name="foamP1"
+                    value="15"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Price 2"
+                  />
+                  <input type="checkbox" name="foamOn2" checked aria-label="Use sheet 3" />
+                  <input
+                    type="number"
+                    name="foamT2"
+                    value="2"
+                    min="0.01"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Thickness 3"
+                  />
+                  <input
+                    type="number"
+                    name="foamP2"
+                    value="25"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Price 3"
+                  />
+                  <input type="checkbox" name="foamOn3" aria-label="Use sheet 4" />
+                  <input
+                    type="number"
+                    name="foamT3"
+                    value="3"
+                    min="0.01"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Thickness 4"
+                  />
+                  <input
+                    type="number"
+                    name="foamP3"
+                    value="35"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                    aria-label="Price 4"
+                  />
+                </div>
+                <details class="more">
+                  <summary>More options</summary>
+                  <label class="field"
+                    ><span class="label">Pocket layers</span
+                    ><select name="layering">
+                      <option value="fewest" selected>Fewest layers (less cutting)</option>
+                      <option value="finest">Most layers (closest fit)</option>
+                    </select></label
+                  >
+                </details>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="fit">
+                Next: Fit →
+              </button>
+            </section>
+
+            <!-- ---------- Shipping: 4 Fit ---------- -->
+            <section class="step" data-step="fit" data-mode="ship">
+              <fieldset data-mode="ship">
+                <legend>Fit</legend>
+                <label class="field"
+                  ><span class="label">Insert style</span
+                  ><select name="insertMode">
+                    <option value="topLoad" selected>Open-top pocket (lift the item out)</option>
+                    <option value="twoPart">Base + lid split at the widest point</option>
+                    <option value="contour">Follow the shape in every layer (soft foam)</option>
+                  </select></label
+                >
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Gap around item (mm)</span
+                    ><input
+                      type="number"
+                      name="clearance"
+                      value="1"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Min side foam (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="minCushion"
+                      value="1"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                </div>
+                <div class="row">
+                  <label class="check check-field"
+                    ><input type="checkbox" name="notches" checked /> Finger notches</label
+                  >
+                  <label class="field"
+                    ><span class="label">Notch diameter (mm)</span
+                    ><input
+                      type="number"
+                      name="notchDiameter"
+                      value="25"
+                      step="any"
+                      inputmode="decimal"
+                      min="5"
+                  /></label>
+                </div>
+                <details class="more">
+                  <summary>More options</summary>
+                  <div class="row">
+                    <label class="field"
+                      ><span class="label">Item may press into foam (mm)</span
+                      ><input
+                        type="number"
+                        name="preload"
+                        value="1.5"
+                        step="any"
+                        inputmode="decimal"
+                        min="0"
+                    /></label>
+                    <label class="field"
+                      ><span class="label">Stack may exceed box by (mm)</span
+                      ><input
+                        type="number"
+                        name="compress"
+                        value="3"
+                        step="any"
+                        inputmode="decimal"
+                        min="0"
+                    /></label>
+                  </div>
+                  <div class="row">
+                    <label class="field"
+                      ><span class="label">Outline oversize (mm/side)</span
+                      ><input
+                        type="number"
+                        name="fitOversize"
+                        value="0"
+                        step="any"
+                        inputmode="decimal"
+                    /></label>
+                    <label class="field"
+                      ><span class="label">Drop foam bits under (cm²)</span
+                      ><input
+                        type="number"
+                        name="minIsland"
+                        value="4"
+                        step="any"
+                        inputmode="decimal"
+                        min="0"
+                    /></label>
+                  </div>
+                  <div class="row">
+                    <label class="field"
+                      ><span class="label">Two-part split after layer (0 = auto)</span
+                      ><input
+                        type="number"
+                        name="parting"
+                        value="0"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                    /></label>
+                  </div>
+                </details>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="output">
+                Next: Output →
+              </button>
+            </section>
+
+            <!-- ---------- Slicer: 1 Model ---------- -->
+            <section class="step" data-step="model" data-mode="slicer">
+              <fieldset data-mode="slicer">
+                <legend>Model</legend>
+                <div class="field">
+                  <span class="label" id="axisLabel">Stack direction</span>
+                  <div class="segmented" role="radiogroup" aria-labelledby="axisLabel">
+                    <label><input type="radio" name="axis" value="z" checked /><span>Z</span></label
+                    ><label><input type="radio" name="axis" value="y" /><span>Y</span></label
+                    ><label><input type="radio" name="axis" value="x" /><span>X</span></label>
+                  </div>
+                </div>
+                <span class="label" id="sizeLabel"
+                  >Size after orientation (mm) · Z = stack height</span
+                >
+                <div class="row row-3" role="group" aria-labelledby="sizeLabel">
+                  <label class="field"
+                    ><span class="label">X</span
+                    ><input type="number" name="sizeX" step="any" inputmode="decimal" min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Y</span
+                    ><input type="number" name="sizeY" step="any" inputmode="decimal" min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Z</span
+                    ><input type="number" name="sizeZ" step="any" inputmode="decimal" min="0.1"
+                  /></label>
+                </div>
+                <div class="size-tools">
+                  <label class="check"
+                    ><input type="checkbox" name="lockRatio" checked /> Lock proportions</label
+                  >
+                  <button class="btn btn-small" type="button" id="resetSizeBtn">
+                    Original size
+                  </button>
+                </div>
+                <p class="hint" id="scaleHint">Scale 100 %</p>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="layers">
+                Next: Layers →
+              </button>
+            </section>
+
+            <!-- ---------- Slicer: 2 Layers ---------- -->
+            <section class="step" data-step="layers" data-mode="slicer">
+              <fieldset data-mode="slicer">
+                <legend>Layers</legend>
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Sheet thickness (mm)</span
+                    ><input
+                      type="number"
+                      name="thickness"
+                      value="10"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.5"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Simplify tolerance (mm)</span
+                    ><input
+                      type="number"
+                      name="tolerance"
+                      value="0.05"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                </div>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="pins">
+                Next: Pins →
+              </button>
+            </section>
+
+            <!-- ---------- Slicer: 3 Pins ---------- -->
+            <section class="step" data-step="pins" data-mode="slicer">
+              <fieldset data-mode="slicer">
+                <legend>Alignment pins</legend>
+                <label class="field"
+                  ><span class="label">Pins</span
+                  ><select name="pinMode">
+                    <option value="none">None</option>
+                    <option value="one">1 centre pin</option>
+                    <option value="two" selected>2 pins</option>
+                  </select></label
+                >
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Diameter (mm)</span
+                    ><input
+                      type="number"
+                      name="pinDiameter"
+                      value="6"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.5"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Spacing (mm)</span
+                    ><input
+                      type="number"
+                      name="pinSpacing"
+                      value="40"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                </div>
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Offset X (mm)</span
+                    ><input
+                      type="number"
+                      name="pinOffsetX"
+                      value="0"
+                      step="any"
+                      inputmode="decimal"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Offset Y (mm)</span
+                    ><input
+                      type="number"
+                      name="pinOffsetY"
+                      value="0"
+                      step="any"
+                      inputmode="decimal"
+                  /></label>
+                </div>
+              </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="output">
+                Next: Output →
+              </button>
+            </section>
+
+            <!-- ---------- Both: Output ---------- -->
+            <section class="step" data-step="output">
+              <fieldset id="labelsFieldset">
+                <legend>Labels</legend>
+                <div class="row">
+                  <label class="check check-field"
+                    ><input type="checkbox" name="labels" checked /> Engrave layer numbers</label
+                  >
+                  <label class="field"
+                    ><span class="label">Text height (mm)</span
+                    ><input
+                      type="number"
+                      name="labelHeight"
+                      value="6"
+                      step="any"
+                      inputmode="decimal"
+                      min="1"
+                  /></label>
+                </div>
+              </fieldset>
+              <fieldset id="nestFieldset">
+                <legend>Foam sheets &amp; cost</legend>
+                <div class="row row-3">
+                  <label class="field"
+                    ><span class="label">Sheet width (ft)</span
+                    ><input
+                      type="number"
+                      name="sheetWft"
+                      value="4"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Sheet height (ft)</span
+                    ><input
+                      type="number"
+                      name="sheetHft"
+                      value="2"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Gap (mm)</span
+                    ><input
+                      type="number"
+                      name="gap"
+                      value="6"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                </div>
+                <div class="row">
+                  <label class="field" data-mode="slicer"
+                    ><span class="label">Price per sheet</span
+                    ><input
+                      type="number"
+                      name="sheetPrice"
+                      value="25"
+                      min="0"
+                      step="any"
+                      inputmode="decimal"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Currency</span
+                    ><input type="text" name="currency" value="$" maxlength="4"
+                  /></label>
+                </div>
+                <p class="hint" data-mode="ship">Prices per thickness are set in step 3 (Foam).</p>
+              </fieldset>
+              <fieldset>
+                <legend>Download</legend>
+                <div class="checks">
+                  <label class="check"><input type="checkbox" name="fmtDxf" checked /> DXF</label>
+                  <label class="check"><input type="checkbox" name="fmtSvg" checked /> SVG</label>
+                  <label class="check"
+                    ><input type="checkbox" name="outLayers" checked /> One file per layer</label
+                  >
+                  <label class="check"
+                    ><input type="checkbox" name="outSheets" checked /> Nested sheets</label
+                  >
+                </div>
+                <button class="btn btn-primary btn-block" type="button" id="exportBtn" disabled>
+                  Download ZIP
+                </button>
+                <button class="btn btn-block" type="button" id="layerSvgBtn" disabled>
+                  This layer as SVG
+                </button>
+              </fieldset>
+            </section>
+          </form>
+          <p class="footnote">Everything runs in your browser — nothing is uploaded.</p>
+        </aside>
+
+        <!-- ================= Viewer (centre) ================= -->
+        <section class="viewer" aria-label="Model view">
+          <div class="viewer-head">
+            <div class="view-tabs" role="tablist" aria-label="View">
+              <button role="tab" id="tab3d" aria-selected="true" aria-controls="viewport">
+                3D
+              </button>
+              <button role="tab" id="tab2d" aria-selected="false" aria-controls="viewport">
+                Cut pattern
+              </button>
+            </div>
+            <div class="scrubber">
+              <div class="readout" id="layerReadout" aria-live="polite">—</div>
+              <input
+                type="range"
+                id="layerSlider"
+                min="0"
+                max="0"
+                value="0"
+                step="1"
+                disabled
+                aria-label="Selected layer"
+                data-mode="slicer"
+              />
+            </div>
+            <button
+              class="btn btn-primary btn-small"
+              type="button"
+              id="quickExportBtn"
+              disabled
+              title="Download the cut files (ZIP)"
+            >
+              Download ZIP
             </button>
           </div>
           <div class="viewport" id="viewport">
-            <canvas id="canvas3d" aria-label="3D stack preview"></canvas>
+            <canvas id="canvas3d" aria-label="3D view"></canvas>
             <canvas id="canvas2d" aria-label="Layer cut pattern" hidden></canvas>
             <div class="empty" id="emptyState">
               <p class="empty-title" id="emptyTitle">Drop an STL file here</p>
               <p class="empty-sub">
-                Binary or ASCII, units in mm. Nothing is uploaded — everything runs in your browser.
+                Binary or ASCII. Nothing is uploaded — everything runs in your browser.
               </p>
               <div class="empty-actions">
                 <label class="btn btn-primary" for="fileInput">Choose file</label>
-                <button class="btn" type="button" id="sampleBtn2">Load sample</button>
+                <button class="btn" type="button" id="sampleBtn2">Try the sample</button>
               </div>
             </div>
             <div class="drop-hint" id="dropHint" hidden>Drop to load</div>
@@ -118,6 +1011,7 @@
               <div class="progress-label" id="progressLabel">Working…</div>
               <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
             </div>
+            <div class="anim-caption" id="animCaption" hidden aria-live="polite"></div>
             <div class="cost-card" id="costCard" hidden aria-live="polite">
               <div class="cost-total" id="costTotal">—</div>
               <div class="cost-detail" id="costDetail"></div>
@@ -127,13 +1021,12 @@
               <span><i class="sw sw-below"></i>Layer below</span>
               <span data-mode="slicer"><i class="sw sw-pin"></i>Pin</span>
               <span data-mode="slicer"><i class="sw sw-open"></i>Open contour</span>
-              <span data-mode="ship"><i class="sw sw-item"></i>Item in this layer</span>
+              <span data-mode="ship"><i class="sw sw-item"></i>Item</span>
             </div>
-            <div class="anim-caption" id="animCaption" hidden aria-live="polite"></div>
             <div class="view-tools" id="viewTools" data-mode="ship">
               <label class="tool"
-                ><span>Explode</span>
-                <input
+                ><span>Lift lid</span
+                ><input
                   type="range"
                   id="explode"
                   min="0"
@@ -144,754 +1037,33 @@
               <label class="tool"><input type="checkbox" id="xray" /> X-ray</label>
             </div>
           </div>
-
-          <div class="scrubber">
-            <div class="readout" id="layerReadout" aria-live="polite">—</div>
-            <input
-              type="range"
-              id="layerSlider"
-              min="0"
-              max="0"
-              value="0"
-              step="1"
-              disabled
-              aria-label="Selected layer"
-            />
-          </div>
-          <p class="stats" id="stats">Load a model to begin.</p>
+          <section class="summary" data-mode="ship" aria-live="polite">
+            <div class="report-status" id="reportStatus" data-state="idle">
+              Load the item you want to ship
+            </div>
+            <dl class="report-grid" id="reportGrid"></dl>
+            <ul class="report-warn" id="reportWarn"></ul>
+          </section>
+          <p class="stats" id="stats" data-mode="slicer">Load a model to begin.</p>
         </section>
 
-        <aside class="panel" aria-label="Settings">
-          <form id="settings" autocomplete="off" novalidate>
-            <section class="report" data-mode="ship" aria-live="polite">
-              <div class="report-status" id="reportStatus" data-state="idle">
-                Load the item you want to ship
-              </div>
-              <dl class="report-grid" id="reportGrid"></dl>
-              <ul class="report-warn" id="reportWarn"></ul>
-            </section>
-
-            <fieldset data-mode="ship" id="layersFieldset" class="keep-enabled">
-              <legend>Layers</legend>
-              <div class="layer-tools">
-                <button class="btn btn-small" type="button" id="showAllBtn">Show all</button>
-                <button class="btn btn-small" type="button" id="lockAllBtn">Lock all</button>
-              </div>
-              <ol class="layer-list" id="layerList" aria-label="Layers, bottom to top"></ol>
-              <button class="btn btn-primary btn-block" type="button" id="playBtn" disabled>
-                ▶ Play packing animation
-              </button>
-              <p class="hint" id="playHint">Lock all layers to play the packing animation.</p>
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Item size</legend>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">STL units</span>
-                  <select name="stlUnits">
-                    <option value="1" selected>mm</option>
-                    <option value="10">cm</option>
-                    <option value="25.4">inch</option>
-                  </select></label
-                >
-                <label class="field"
-                  ><span class="label">Scale %</span>
-                  <input
-                    type="number"
-                    name="itemScale"
-                    value="100"
-                    min="1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <span class="label" id="itemSizeLabel"
-                >Size along the STL's X / Y / Z (<span class="u">in</span>)</span
-              >
-              <div class="row row-3" role="group" aria-labelledby="itemSizeLabel">
-                <label class="field"
-                  ><span class="label">X</span>
-                  <input type="number" name="itemX" min="0.01" step="any" inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Y</span>
-                  <input type="number" name="itemY" min="0.01" step="any" inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Z</span>
-                  <input type="number" name="itemZ" min="0.01" step="any" inputmode="decimal"
-                /></label>
-              </div>
-              <div class="size-tools">
-                <label class="check"
-                  ><input type="checkbox" name="itemLock" checked /> Lock proportions</label
-                >
-                <button class="btn btn-small" type="button" id="itemResetBtn">Original size</button>
-              </div>
-              <p class="hint" id="itemScaleHint">Scale 100 %</p>
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Box</legend>
-              <div class="field">
-                <span class="label" id="unitsLabel">Units</span>
-                <div class="segmented seg-2" role="radiogroup" aria-labelledby="unitsLabel">
-                  <label
-                    ><input type="radio" name="units" value="in" checked /><span>in</span></label
-                  >
-                  <label><input type="radio" name="units" value="mm" /><span>mm</span></label>
-                </div>
-              </div>
-              <label class="field"
-                ><span class="label">Box</span>
-                <select name="boxPreset" id="boxPreset"></select
-              ></label>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Sizes are</span>
-                  <select name="boxMeasure">
-                    <option value="inside" selected>Inside</option>
-                    <option value="outside">Outside (minus walls)</option>
-                  </select></label
-                >
-                <label class="field" id="wallField" hidden
-                  ><span class="label">Wall (<span class="u">in</span>)</span>
-                  <input
-                    type="number"
-                    name="boxWall"
-                    value="0.125"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row row-3">
-                <label class="field"
-                  ><span class="label">Length (<span class="u">in</span>)</span>
-                  <input
-                    type="number"
-                    name="boxL"
-                    value="8"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Width (<span class="u">in</span>)</span>
-                  <input
-                    type="number"
-                    name="boxW"
-                    value="8"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Depth (<span class="u">in</span>)</span>
-                  <input
-                    type="number"
-                    name="boxH"
-                    value="8"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <p class="hint hint-top" id="boxInsideHint" hidden></p>
-              <div class="save-box">
-                <input
-                  type="text"
-                  name="boxName"
-                  maxlength="40"
-                  placeholder="Name this box, e.g. Mailer M3"
-                  aria-label="Custom box name"
-                />
-                <button class="btn btn-small" type="button" id="saveBoxBtn">Save box</button>
-                <button class="btn btn-small" type="button" id="deleteBoxBtn" hidden>Delete</button>
-              </div>
-              <label class="field"
-                ><span class="label">“Smallest box” searches</span>
-                <select name="boxSearch">
-                  <option value="all" selected>My boxes + standard sizes</option>
-                  <option value="mine">My boxes only</option>
-                  <option value="standard">Standard sizes only</option>
-                </select></label
-              >
-              <button class="btn btn-small btn-block" type="button" id="smallestBoxBtn">
-                Smallest box that fits
-              </button>
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Item orientation</legend>
-              <div class="field">
-                <span class="label" id="upLabel">Which model axis points up</span>
-                <div class="segmented" role="radiogroup" aria-labelledby="upLabel">
-                  <label
-                    ><input type="radio" name="shipAxis" value="z" checked /><span>Z</span></label
-                  >
-                  <label><input type="radio" name="shipAxis" value="y" /><span>Y</span></label>
-                  <label><input type="radio" name="shipAxis" value="x" /><span>X</span></label>
-                </div>
-              </div>
-              <div class="checks">
-                <label class="check"><input type="checkbox" name="turn90" /> Turn 90°</label>
-                <label class="check"><input type="checkbox" name="flip" /> Upside down</label>
-              </div>
-              <button class="btn btn-small btn-block" type="button" id="autoOrientBtn">
-                Best orientation for this box
-              </button>
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Base &amp; top layers</legend>
-              <div class="shell-block">
-                <div class="field">
-                  <span class="label" id="baseModeLabel">Base</span>
-                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="baseModeLabel">
-                    <label
-                      ><input type="radio" name="baseMode" value="closed" checked /><span
-                        >Closed</span
-                      ></label
-                    >
-                    <label
-                      ><input type="radio" name="baseMode" value="open" /><span>Open</span></label
-                    >
-                  </div>
-                </div>
-                <div class="shell-layers" id="baseLayersUi">
-                  <label class="field"
-                    ><span class="label">Layers</span>
-                    <select name="baseCount">
-                      <option value="1" selected>1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                    </select></label
-                  >
-                  <div class="shell-thk">
-                    <span class="label"
-                      >Thickness of each (<span class="u">in</span>), bottom to top</span
-                    >
-                    <div class="shell-thk-inputs">
-                      <label class="field"
-                        ><span class="label">#1</span>
-                        <input
-                          type="number"
-                          name="baseT0"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Base layer 1 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#2</span>
-                        <input
-                          type="number"
-                          name="baseT1"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Base layer 2 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#3</span>
-                        <input
-                          type="number"
-                          name="baseT2"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Base layer 3 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#4</span>
-                        <input
-                          type="number"
-                          name="baseT3"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Base layer 4 thickness"
-                      /></label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="shell-block">
-                <div class="field">
-                  <span class="label" id="topModeLabel">Top</span>
-                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="topModeLabel">
-                    <label
-                      ><input type="radio" name="topMode" value="open" checked /><span
-                        >Open</span
-                      ></label
-                    >
-                    <label
-                      ><input type="radio" name="topMode" value="closed" /><span
-                        >Closed</span
-                      ></label
-                    >
-                  </div>
-                </div>
-                <div class="shell-layers" id="topLayersUi" hidden>
-                  <label class="field"
-                    ><span class="label">Layers</span>
-                    <select name="topCount">
-                      <option value="1" selected>1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                    </select></label
-                  >
-                  <div class="shell-thk">
-                    <span class="label"
-                      >Thickness of each (<span class="u">in</span>), bottom to top</span
-                    >
-                    <div class="shell-thk-inputs">
-                      <label class="field"
-                        ><span class="label">#1</span>
-                        <input
-                          type="number"
-                          name="topT0"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Top layer 1 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#2</span>
-                        <input
-                          type="number"
-                          name="topT1"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Top layer 2 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#3</span>
-                        <input
-                          type="number"
-                          name="topT2"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Top layer 3 thickness"
-                      /></label>
-                      <label class="field"
-                        ><span class="label">#4</span>
-                        <input
-                          type="number"
-                          name="topT3"
-                          value="1"
-                          min="0.05"
-                          step="any"
-                          inputmode="decimal"
-                          aria-label="Top layer 4 thickness"
-                      /></label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <p class="hint" id="shellHint"></p>
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Foam sheets</legend>
-              <p class="hint hint-top">Tick the thicknesses you can buy. Price is per sheet.</p>
-              <div class="foam-table" role="group" aria-label="Foam thicknesses">
-                <span class="label">Use</span>
-                <span class="label">Thickness (<span class="u">in</span>)</span>
-                <span class="label">Price / sheet</span>
-                <input type="checkbox" name="foamOn0" checked aria-label="Use sheet 1" />
-                <input
-                  type="number"
-                  name="foamT0"
-                  value="0.5"
-                  min="0.01"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Thickness 1"
-                />
-                <input
-                  type="number"
-                  name="foamP0"
-                  value="10"
-                  min="0"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Price 1"
-                />
-                <input type="checkbox" name="foamOn1" checked aria-label="Use sheet 2" />
-                <input
-                  type="number"
-                  name="foamT1"
-                  value="1"
-                  min="0.01"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Thickness 2"
-                />
-                <input
-                  type="number"
-                  name="foamP1"
-                  value="15"
-                  min="0"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Price 2"
-                />
-                <input type="checkbox" name="foamOn2" checked aria-label="Use sheet 3" />
-                <input
-                  type="number"
-                  name="foamT2"
-                  value="2"
-                  min="0.01"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Thickness 3"
-                />
-                <input
-                  type="number"
-                  name="foamP2"
-                  value="25"
-                  min="0"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Price 3"
-                />
-                <input type="checkbox" name="foamOn3" aria-label="Use sheet 4" />
-                <input
-                  type="number"
-                  name="foamT3"
-                  value="3"
-                  min="0.01"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Thickness 4"
-                />
-                <input
-                  type="number"
-                  name="foamP3"
-                  value="35"
-                  min="0"
-                  step="any"
-                  inputmode="decimal"
-                  aria-label="Price 4"
-                />
-              </div>
-              <label class="field"
-                ><span class="label">Layer plan</span>
-                <select name="layering">
-                  <option value="fewest" selected>Fewest layers (less cutting)</option>
-                  <option value="finest">Most layers (closest fit)</option>
-                </select></label
-              >
-            </fieldset>
-
-            <fieldset data-mode="ship">
-              <legend>Fit &amp; protection</legend>
-              <label class="field"
-                ><span class="label">Insert style</span>
-                <select name="insertMode">
-                  <option value="topLoad" selected>
-                    Open-top pocket (lift the item out of the top)
-                  </option>
-                  <option value="twoPart">Base + lid split at the widest point</option>
-                  <option value="contour">Follow the shape in every layer (soft foam)</option>
-                </select></label
-              >
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Min side foam (<span class="u">in</span>)</span>
-                  <input
-                    type="number"
-                    name="minCushion"
-                    value="1"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Gap around item (mm)</span>
-                  <input
-                    type="number"
-                    name="clearance"
-                    value="1"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Item may press into foam (mm)</span>
-                  <input
-                    type="number"
-                    name="preload"
-                    value="1.5"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Stack may exceed box by (mm)</span>
-                  <input
-                    type="number"
-                    name="compress"
-                    value="3"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Two-part split after layer (0 = auto)</span>
-                  <input
-                    type="number"
-                    name="parting"
-                    value="0"
-                    min="0"
-                    step="1"
-                    inputmode="numeric"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="check check-field"
-                  ><input type="checkbox" name="notches" checked /> Finger notches</label
-                >
-                <label class="field"
-                  ><span class="label">Notch diameter (mm)</span>
-                  <input
-                    type="number"
-                    name="notchDiameter"
-                    value="25"
-                    min="5"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Outline oversize (mm/side)</span>
-                  <input type="number" name="fitOversize" value="0" step="any" inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Drop foam bits under (cm²)</span>
-                  <input
-                    type="number"
-                    name="minIsland"
-                    value="4"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-            </fieldset>
-
-            <fieldset data-mode="slicer">
-              <legend>Model</legend>
-              <div class="field">
-                <span class="label" id="axisLabel">Stack direction</span>
-                <div class="segmented" role="radiogroup" aria-labelledby="axisLabel">
-                  <label><input type="radio" name="axis" value="z" checked /><span>Z</span></label>
-                  <label><input type="radio" name="axis" value="y" /><span>Y</span></label>
-                  <label><input type="radio" name="axis" value="x" /><span>X</span></label>
-                </div>
-              </div>
-              <div class="field">
-                <span class="label" id="sizeLabel"
-                  >Size (mm, after orientation · Z = stack height)</span
-                >
-                <div class="row row-3" role="group" aria-labelledby="sizeLabel">
-                  <label class="field"
-                    ><span class="label">X (mm)</span>
-                    <input type="number" name="sizeX" min="0.1" step="any" inputmode="decimal"
-                  /></label>
-                  <label class="field"
-                    ><span class="label">Y (mm)</span>
-                    <input type="number" name="sizeY" min="0.1" step="any" inputmode="decimal"
-                  /></label>
-                  <label class="field"
-                    ><span class="label">Z (mm)</span>
-                    <input type="number" name="sizeZ" min="0.1" step="any" inputmode="decimal"
-                  /></label>
-                </div>
-              </div>
-              <div class="size-tools">
-                <label class="check"
-                  ><input type="checkbox" name="lockRatio" checked /> Lock proportions</label
-                >
-                <button class="btn btn-small" type="button" id="resetSizeBtn">Original size</button>
-              </div>
-              <p class="hint" id="scaleHint">Scale 100 %</p>
-            </fieldset>
-
-            <fieldset data-mode="slicer">
-              <legend>Layers</legend>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Sheet thickness (mm)</span>
-                  <input
-                    type="number"
-                    name="thickness"
-                    value="10"
-                    min="0.5"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Simplify tolerance (mm)</span>
-                  <input
-                    type="number"
-                    name="tolerance"
-                    value="0.05"
-                    min="0"
-                    step="0.01"
-                    inputmode="decimal"
-                /></label>
-              </div>
-            </fieldset>
-
-            <fieldset data-mode="slicer">
-              <legend>Alignment pins</legend>
-              <label class="field"
-                ><span class="label">Pins</span>
-                <select name="pinMode">
-                  <option value="none">None</option>
-                  <option value="one">1 centre pin</option>
-                  <option value="two" selected>2 pins</option>
-                </select></label
-              >
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Diameter (mm)</span>
-                  <input
-                    type="number"
-                    name="pinDiameter"
-                    value="6"
-                    min="0.5"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Spacing (mm)</span>
-                  <input
-                    type="number"
-                    name="pinSpacing"
-                    value="40"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Offset X (mm)</span>
-                  <input type="number" name="pinOffsetX" value="0" step="any" inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Offset Y (mm)</span>
-                  <input type="number" name="pinOffsetY" value="0" step="any" inputmode="decimal"
-                /></label>
-              </div>
-            </fieldset>
-
-            <fieldset id="labelsFieldset">
-              <legend>Labels</legend>
-              <label class="check"
-                ><input type="checkbox" name="labels" checked /> Engrave layer numbers (L01,
-                L02…)</label
-              >
-              <label class="field"
-                ><span class="label">Text height (mm)</span>
-                <input
-                  type="number"
-                  name="labelHeight"
-                  value="6"
-                  min="1"
-                  step="any"
-                  inputmode="decimal"
-              /></label>
-            </fieldset>
-
-            <fieldset id="nestFieldset">
-              <legend>Sheet nesting &amp; cost</legend>
-              <div class="row row-3">
-                <label class="field"
-                  ><span class="label">Width (ft)</span>
-                  <input
-                    type="number"
-                    name="sheetWft"
-                    value="4"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Height (ft)</span>
-                  <input
-                    type="number"
-                    name="sheetHft"
-                    value="2"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Gap (mm)</span>
-                  <input type="number" name="gap" value="6" min="0" step="any" inputmode="decimal"
-                /></label>
-              </div>
-              <div class="row">
-                <label class="field" data-mode="slicer"
-                  ><span class="label">Price per sheet</span>
-                  <input
-                    type="number"
-                    name="sheetPrice"
-                    value="25"
-                    min="0"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Currency</span>
-                  <input type="text" name="currency" value="$" maxlength="4" class="text-input"
-                /></label>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend>Export</legend>
-              <div class="checks">
-                <label class="check"><input type="checkbox" name="fmtDxf" checked /> DXF</label>
-                <label class="check"><input type="checkbox" name="fmtSvg" checked /> SVG</label>
-                <label class="check"
-                  ><input type="checkbox" name="outLayers" checked /> One file per layer</label
-                >
-                <label class="check"
-                  ><input type="checkbox" name="outSheets" checked /> Nested sheets</label
-                >
-              </div>
-              <button class="btn btn-primary btn-block" type="button" id="exportBtn" disabled>
-                Download ZIP
-              </button>
-              <button class="btn btn-block" type="button" id="layerSvgBtn" disabled>
-                Download this layer as SVG
-              </button>
-            </fieldset>
-          </form>
-          <p class="footnote">All processing happens locally in your browser.</p>
+        <!-- ================= Layers (right, shipping) ================= -->
+        <aside class="stack-rail" data-mode="ship" aria-label="Layers">
+          <div class="rail-head">
+            <h2>Layers</h2>
+            <div class="rail-tools">
+              <button class="btn btn-small" type="button" id="showAllBtn">Show all</button>
+              <button class="btn btn-small" type="button" id="lockAllBtn">Lock all</button>
+            </div>
+          </div>
+          <p class="hint rail-hint">Top of the box first. Click a layer to inspect it.</p>
+          <ol class="layer-list" id="layerList" aria-label="Layers, bottom to top"></ol>
+          <div class="rail-foot">
+            <button class="btn btn-primary btn-block" type="button" id="playBtn" disabled>
+              ▶ Packing animation
+            </button>
+            <p class="hint" id="playHint">Lock all layers to play the packing animation.</p>
+          </div>
         </aside>
       </main>
       <div class="toasts" id="toasts" aria-live="polite"></div>

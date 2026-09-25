@@ -40,6 +40,7 @@ const ui = {
   readout: $('layerReadout'),
   stats: $('stats'),
   exportBtn: $<HTMLButtonElement>('exportBtn'),
+  quickExportBtn: $<HTMLButtonElement>('quickExportBtn'),
   layerSvgBtn: $<HTMLButtonElement>('layerSvgBtn'),
   themeBtn: $<HTMLButtonElement>('themeBtn'),
   scaleHint: $('scaleHint'),
@@ -129,6 +130,8 @@ function syncButtons(): void {
   ui.exportBtn.disabled = !ready;
   ui.layerSvgBtn.disabled = !ready;
   ui.exportBtn.textContent = exporting ? 'Building ZIP…' : 'Download ZIP';
+  ui.quickExportBtn.disabled = !ready;
+  ui.quickExportBtn.textContent = ui.exportBtn.textContent;
 }
 
 // ---- Model size (X / Y / Z in mm, oriented frame) ----
@@ -577,6 +580,7 @@ ui.exportBtn.addEventListener('click', () => {
     send({ type: 'export', job: ++exportJob, opts });
   }
 });
+ui.quickExportBtn.addEventListener('click', () => ui.exportBtn.click());
 ui.layerSvgBtn.addEventListener('click', () => {
   send({ type: 'layerSvg', job: ++svgJob, layer: current });
 });
@@ -615,6 +619,7 @@ function setMode(next: 'slicer' | 'ship'): void {
   ui.modeShip.tabIndex = mode === 'ship' ? 0 : -1;
   ui.emptyTitle.textContent =
     mode === 'ship' ? 'Drop the STL of the item you want to ship' : 'Drop an STL file here';
+  showStep(stepState[mode]);
   ui.explode.value = '0';
   stopAnimation();
   unlockAll();
@@ -858,7 +863,6 @@ function renderReport(): void {
       `${S.thickness.length} layers · ${[...counts].map(([t, c]) => `${c} × ${thicknessLabel(t).replace('in', ' in')}`).join(', ')}`,
     ],
     ['Layers', layerGroups(S)],
-    ['Item', S.itemSize.map((v) => mm(v)).join(' × ') + ' mm'],
     ['Foam sides', L(r.sideWall)],
     ['Foam below / above', `${L(r.bottomCushion)} / ${r.topOpen ? 'open top' : L(r.topCushion)}`],
     [
@@ -892,6 +896,7 @@ function renderReport(): void {
     dt.textContent = k;
     const dd = document.createElement('dd');
     dd.textContent = v;
+    dd.dataset.k = k;
     grid.append(dt, dd);
   }
   for (const w of warnings) {
@@ -1202,7 +1207,7 @@ function stopAnimation(): void {
   if (!stackView.animating) return;
   stackView.stopAnimation();
   ui.animCaption.hidden = true;
-  ui.playBtn.textContent = '▶ Play packing animation';
+  ui.playBtn.textContent = '▶ Packing animation';
 }
 
 ui.playBtn.addEventListener('click', () => {
@@ -1242,3 +1247,52 @@ function syncShell(): void {
   $('shellHint').textContent = ship.shellHint();
 }
 syncShell();
+
+// ---------------------------------------------------------------------------
+// Setup steps: one group of settings at a time
+
+const stepState: Record<'ship' | 'slicer', string> = { ship: 'item', slicer: 'model' };
+const stepTabs = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('.step-tab')].filter(
+    (t) => !t.dataset.mode || t.dataset.mode === mode,
+  );
+
+function showStep(step: string): void {
+  stepState[mode] = step;
+  for (const t of document.querySelectorAll<HTMLButtonElement>('.step-tab')) {
+    const on = t.dataset.step === step && (!t.dataset.mode || t.dataset.mode === mode);
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+  }
+  for (const sec of document.querySelectorAll<HTMLElement>('section.step')) {
+    sec.hidden = sec.dataset.step !== step;
+  }
+  const out = document.querySelector('.step-n-out');
+  if (out) out.textContent = mode === 'ship' ? '5' : '4';
+}
+
+for (const t of document.querySelectorAll<HTMLButtonElement>('.step-tab')) {
+  t.addEventListener('click', () => showStep(t.dataset.step!));
+  t.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const tabs = stepTabs();
+    const i = tabs.indexOf(t) + (e.key === 'ArrowRight' ? 1 : -1);
+    const next = tabs[(i + tabs.length) % tabs.length];
+    next.focus();
+    showStep(next.dataset.step!);
+  });
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-goto]')) {
+  b.addEventListener('click', () => {
+    showStep(b.dataset.goto!);
+    document.querySelector<HTMLElement>('.setup')?.scrollTo({ top: 0 });
+  });
+}
+showStep('model');
+
+// The units switch sits in the top bar, outside the settings form.
+for (const r of document.querySelectorAll<HTMLInputElement>('input[name="units"]')) {
+  r.addEventListener('change', () => {
+    if (mode === 'ship') onShipInput('units');
+  });
+}
