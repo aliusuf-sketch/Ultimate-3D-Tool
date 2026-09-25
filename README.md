@@ -29,16 +29,17 @@ Switch to **Shipping insert** in the top bar to make laser-cut foam packaging th
 
 1. Load the STL of the item (or **Load sample** for a vase). Under **Item size**, set the STL's units (mm / cm / inch) and scale it by % or by exact X / Y / Z size (proportions locked or free).
 2. Enter the box's **inside** dimensions (inches or mm), pick a standard size, or click **Smallest box that fits**.
-3. Tick the foam thicknesses you can buy (½, 1, 2, 3 in by default) and their price per sheet.
-4. The planner then:
+3. **Base & top layers**: the base is _Closed_ (default) or _Open_ (the item sits on the box floor); the top is _Open_ (default, the item lifts out of the top) or _Closed_. For a closed side, choose how many layers (1–4) and each layer's thickness. The pocket layers between them fill the rest of the box. With an open top the report shows the space left to the box lid.
+4. Tick the foam thicknesses you can buy (½, 1, 2, 3 in by default) and their price per sheet.
+5. The planner then:
    - chooses the sheets and their order so the stack fills the box height, with the item resting on a layer and its top as close as possible under the next layer;
    - picks the orientation with the most foam and the least vertical play (or set it yourself);
    - cuts each layer's cavity with a clearance gap. The default **Open-top pocket** style glues every layer the item touches into one pocket block whose cavity only widens going up, so the item lifts straight out of the top; solid lid pads sit above it. In **Base + lid** style the stack splits at the best parting layer and the cavities have no undercuts, so a rigid print drops into the base and the lid closes over it. **Follow the shape** cuts each layer to the item's own outline, for soft foam;
    - adds finger notches so the item can be lifted out, and drops tiny loose foam bits.
-5. **Boxes**: enter sizes as _inside_ or _outside_ (with a wall thickness), and **Save box** to keep your own box sizes under "My boxes" (stored in this browser). "Smallest box that fits" can search your boxes, the standard sizes, or both.
-6. **Layers panel**: show/hide any layer in the 3D view, remove a layer (it is left out of the cut files, nesting and cost, and the report warns about the gap), or lock layers. When every layer is locked the design is frozen and **Play packing animation** shows the layers dropping into the box, then the item, then the lid pads.
-7. The **protection report** shows foam on each side, above and below, how far the item can still move vertically, and anything to fix. The corner card shows the cost per foam thickness.
-8. **Download ZIP**: one DXF/SVG per layer (named like `L02_pocket_2in`), sheets nested per thickness (`sheets/2in/…`), `cut_list.csv`, and a README with the stack order and gluing steps.
+6. **Boxes**: enter sizes as _inside_ or _outside_ (with a wall thickness), and **Save box** to keep your own box sizes under "My boxes" (stored in this browser). "Smallest box that fits" can search your boxes, the standard sizes, or both.
+7. **Layers panel**: show/hide any layer in the 3D view, remove a layer (it is left out of the cut files, nesting and cost, and the report warns about the gap), or lock layers. When every layer is locked the design is frozen and **Play packing animation** shows the layers dropping into the box, then the item, then the lid pads.
+8. The **protection report** shows foam on each side, above and below, how far the item can still move vertically, and anything to fix. The corner card shows the cost per foam thickness.
+9. **Download ZIP**: one DXF/SVG per layer (named like `L02_pocket_2in`), sheets nested per thickness (`sheets/2in/…`), `cut_list.csv`, and a README with the stack order and gluing steps.
 
 ## How to use (model slicer)
 

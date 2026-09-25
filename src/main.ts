@@ -16,7 +16,7 @@ import { ShipForm, SHIP_FIELDS, PRICE_FIELDS } from './ui/shipForm';
 import { deleteBox, saveBox } from './ui/boxStore';
 import type { AssemblyStep } from './view3d/stack';
 import { orientedDims, rankOrientations, smallestBox } from './core/insert';
-import { insertLabelText, thicknessLabel } from './core/export/insertZip';
+import { displayRole, insertLabelText, thicknessLabel } from './core/export/insertZip';
 import type { InsertSummary } from './worker/protocol';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -411,8 +411,7 @@ function selectLayer(L: number): void {
   const z0 = layers.z[L * 2],
     z1 = layers.z[L * 2 + 1];
   if (mode === 'ship' && shipSummary) {
-    const r0 = shipSummary.roles[L];
-    const role = shipSummary.topLoad ? (r0 === 'base' ? 'pocket' : 'lid pad') : r0;
+    const role = displayRole(shipSummary, L);
     ui.readout.textContent =
       `${layerName(L)} · ${role === 'layer' ? '' : `${role} · `}` +
       `${thicknessLabel(shipSummary.thickness[L]).replace('in', ' in')} · z ${mm(z0)}–${mm(z1)} mm` +
@@ -671,7 +670,13 @@ function prepareShip(newItem: boolean): void {
     if (best.margin >= s.minCushion) {
       ship.setOrientation(best.axis, best.turn90);
     } else {
-      const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, ship.searchBoxes());
+      const b = smallestBox(
+        ship.scaledSize(),
+        s.minCushion,
+        s.clearance,
+        ship.searchBoxes(),
+        shellNeed(),
+      );
       if (b) {
         ship.setBox(b.box);
         const o = rankOrientations(ship.scaledSize(), ship.settings())[0];
@@ -725,6 +730,7 @@ function onShipInput(name: string): void {
   }
   ui.itemScaleHint.textContent = ship.scaleHint();
   syncBoxUi();
+  syncShell();
   if (name === 'boxName' || name === 'boxSearch') return;
   if (PRICE_FIELDS.has(name)) return renderShipCost();
   if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
@@ -757,7 +763,7 @@ ui.smallestBoxBtn.addEventListener('click', () => {
   const s = ship.settings();
   const list = ship.searchBoxes();
   if (!list.length) return toast('No saved boxes yet — save one or search standard sizes', 'error');
-  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, list);
+  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, list, shellNeed());
   if (!b) return toast('None of these boxes is big enough — enter a custom size', 'error');
   ship.setBox(b.box);
   const best = rankOrientations(ship.scaledSize(), ship.settings())[0];
@@ -783,6 +789,19 @@ function showShipError(message: string): void {
 }
 
 const span = (a: number, b: number) => (a === b ? layerName(a) : `${layerName(a)}–${layerName(b)}`);
+
+/** "base L01 · pocket L02–L05 · top L06" from consecutive display roles. */
+function layerGroups(S: InsertSummary): string {
+  const parts: string[] = [];
+  let start = 0;
+  for (let i = 1; i <= S.thickness.length; i++) {
+    if (i === S.thickness.length || displayRole(S, i) !== displayRole(S, start)) {
+      parts.push(`${displayRole(S, start)} ${span(start, i - 1)}`);
+      start = i;
+    }
+  }
+  return parts.join(' · ');
+}
 
 function renderReport(): void {
   const grid = ui.reportGrid;
@@ -838,28 +857,21 @@ function renderReport(): void {
       'Stack',
       `${S.thickness.length} layers · ${[...counts].map(([t, c]) => `${c} × ${thicknessLabel(t).replace('in', ' in')}`).join(', ')}`,
     ],
-    ...(S.roles.includes('base')
-      ? ([
-          [
-            'Split',
-            `${S.topLoad ? 'pocket' : 'base'} ${span(0, S.baseCount - 1)}` +
-              (S.baseCount < S.thickness.length
-                ? ` · ${S.topLoad ? 'lid pad' : 'lid'} ${span(S.baseCount, S.thickness.length - 1)}`
-                : ''),
-          ],
-        ] as [string, string][])
-      : []),
+    ['Layers', layerGroups(S)],
     ['Item', S.itemSize.map((v) => mm(v)).join(' × ') + ' mm'],
     ['Foam sides', L(r.sideWall)],
-    ['Foam below / above', `${L(r.bottomCushion)} / ${L(r.topCushion)}`],
+    ['Foam below / above', `${L(r.bottomCushion)} / ${r.topOpen ? 'open top' : L(r.topCushion)}`],
     [
-      'Vertical play',
+      r.topOpen ? 'Vertical play (down)' : 'Vertical play',
       play < 0.05
         ? r.preloaded > 0.05
           ? `none (presses ${mm(r.preloaded)} mm)`
           : 'none'
         : `${mm(play)} mm`,
     ],
+    ...(r.topOpen
+      ? ([['Space to box lid', r.headroom < 0.5 ? 'none' : L(r.headroom)]] as [string, string][])
+      : []),
     [
       'Stack vs box',
       Math.abs(r.fillError) < 0.05
@@ -1085,7 +1097,7 @@ function renderLayerList(): void {
       (i === current ? ' selected' : '') +
       (st.hidden ? ' hidden-layer' : '') +
       (st.removed ? ' removed' : '');
-    const role = S.topLoad ? (S.roles[i] === 'base' ? 'pocket' : 'lid pad') : S.roles[i];
+    const role = displayRole(S, i);
     const name = `${layerName(i)} · ${role === 'layer' ? '' : `${role} · `}${thicknessLabel(S.thickness[i]).replace('in', ' in')}`;
     const eye = document.createElement('button');
     eye.type = 'button';
@@ -1177,13 +1189,8 @@ function assemblySteps(): AssemblyStep[] {
   for (let i = 0; i < n; i++) {
     if (i === itemAfter) steps.push({ kind: 'item', label: 'Placing the item' });
     if (!keep(i)) continue;
-    const role = S.topLoad
-      ? S.roles[i] === 'base'
-        ? 'pocket layer'
-        : 'lid pad'
-      : S.roles[i] === 'layer'
-        ? 'layer'
-        : `${S.roles[i]} layer`;
+    const r0 = displayRole(S, i);
+    const role = r0 === 'layer' ? 'layer' : `${r0} layer`;
     steps.push({ kind: 'layer', index: i, label: `${layerName(i)} · ${role} · ${t(i)}` });
   }
   if (itemAfter >= n) steps.push({ kind: 'item', label: 'Placing the item' });
@@ -1220,3 +1227,18 @@ ui.playBtn.addEventListener('click', () => {
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// Base & top layers
+
+/** Foam the box height must hold under and over the item. */
+function shellNeed(): { below: number; above: number } {
+  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+  return { below: sum(ship.shellLayers('base')), above: sum(ship.shellLayers('top')) };
+}
+
+function syncShell(): void {
+  ship.syncShellUi();
+  $('shellHint').textContent = ship.shellHint();
+}
+syncShell();

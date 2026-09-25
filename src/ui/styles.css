@@ -905,3 +905,29 @@ fieldset:disabled {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ---- Base & top layers ---- */
+.shell-block {
+  padding: 8px 0 4px;
+}
+.shell-block + .shell-block {
+  border-top: 1px dashed var(--border);
+}
+.shell-layers {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.shell-thk-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.shell-thk-inputs .field {
+  margin-bottom: 0;
+}
+.shell-thk-inputs .label {
+  font-size: 11px;
+}

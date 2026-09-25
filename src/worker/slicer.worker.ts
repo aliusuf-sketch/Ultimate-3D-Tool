@@ -282,6 +282,7 @@ async function doInsert(): Promise<void> {
         roles: result.roles,
         baseCount: result.baseCount,
         topLoad: result.topLoad,
+        sections: result.sections,
         itemSize: result.itemSize,
         itemOffset: result.itemOffset,
         report: result.report,

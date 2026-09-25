@@ -1,6 +1,6 @@
 import type { PackedExtras, PackedLayers } from '../core/pack';
 import type { PreviewGeometry } from '../core/preview';
-import type { InsertReport, InsertSettings, LayerRole } from '../core/insert';
+import type { InsertReport, InsertSettings, LayerRole, LayerSection } from '../core/insert';
 import type { InsertExportOptions } from '../core/export/insertZip';
 import type { SheetInfo, ExportOptions, ExtrasSettings, SliceSettings } from '../types';
 
@@ -42,6 +42,7 @@ export interface InsertSummary {
   roles: LayerRole[];
   baseCount: number;
   topLoad: boolean;
+  sections: LayerSection[];
   itemSize: [number, number, number];
   itemOffset: [number, number, number];
   report: InsertReport;

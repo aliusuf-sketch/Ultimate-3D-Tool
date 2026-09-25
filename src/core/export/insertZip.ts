@@ -2,7 +2,7 @@
 import type { ExportOptions, LayerExtras, NestResult, Part } from '../../types';
 import { estimateCost, formatMoney, MM_PER_FT } from '../cost';
 import { layerName } from '../extras';
-import type { InsertResult, LayerRole } from '../insert';
+import type { InsertResult, LayerRole, LayerSection } from '../insert';
 import { drawingToDXF } from './dxf';
 import { drawingToSVG } from './svg';
 import { layerDrawing, sheetDrawing, type ExportInput } from './zip';
@@ -39,10 +39,21 @@ export function thicknessLabel(mm: number): string {
   return `${Math.round(mm * 10) / 10}mm`;
 }
 
-/** Role of layer i as named in files (pocket / lidpad for top-loading inserts). */
-export function layerRole(r: InsertResult, i: number): string {
-  if (r.topLoad) return r.roles[i] === 'base' ? 'pocket' : 'lidpad';
+/** Human role of layer i: base / pocket / lid / top (or the two-part base / lid halves). */
+export function displayRole(
+  r: { roles: LayerRole[]; sections?: LayerSection[]; topLoad: boolean },
+  i: number,
+): string {
+  const sec = r.sections?.[i];
+  if (sec === 'base') return 'base';
+  if (sec === 'top') return 'top';
+  if (r.topLoad) return r.roles[i] === 'base' ? 'pocket' : 'lid';
   return roleName(r.roles[i]);
+}
+
+/** Role of layer i as named in files. */
+export function layerRole(r: InsertResult, i: number): string {
+  return displayRole(r, i);
 }
 
 export function roleName(role: LayerRole): string {

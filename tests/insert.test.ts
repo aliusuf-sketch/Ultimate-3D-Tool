@@ -241,3 +241,83 @@ describe('insert export', () => {
     expect(readme).toContain('REMOVED (not cut)');
   });
 });
+
+describe('base and top layers', () => {
+  const o = {
+    compress: 3,
+    minCushion: IN,
+    layering: 'fewest' as const,
+    placement: 'auto' as const,
+    preload: 1.5,
+  };
+
+  it('uses exactly the chosen base/top layers and fills only the pocket', () => {
+    const p = planStack(8 * IN, 140, [IN / 2, IN, 2 * IN], {
+      ...o,
+      shell: { base: [IN], top: [] },
+    });
+    expect(p.seq[0]).toBeCloseTo(IN, 6);
+    expect(p.itemZ).toBeCloseTo(IN, 6);
+    expect(p.seq.reduce((a, b) => a + b, 0)).toBeCloseTo(8 * IN, 5);
+    // 7 in pocket with 2 in sheets first: 2+2+2+1 — no stack of thin cushion layers.
+    expect(p.seq.length).toBeLessThanOrEqual(5);
+  });
+
+  it('closed top keeps the chosen lid layers on top', () => {
+    const p = planStack(8 * IN, 140, [IN / 2, IN, 2 * IN], {
+      ...o,
+      shell: { base: [IN / 2], top: [IN, IN / 2] },
+    });
+    expect(p.seq.slice(-2).map((v) => +v.toFixed(2))).toEqual([
+      +IN.toFixed(2),
+      +(IN / 2).toFixed(2),
+    ]);
+    expect(p.seq[0]).toBeCloseTo(IN / 2, 6);
+  });
+
+  it('open base puts the item on the box floor', () => {
+    const p = planStack(8 * IN, 140, [IN, 2 * IN], { ...o, shell: { base: [], top: [] } });
+    expect(p.itemZ).toBe(0);
+  });
+
+  it('rejects an item taller than the pocket', () => {
+    expect(() => planStack(6 * IN, 140, [IN], { ...o, shell: { base: [IN], top: [IN] } })).toThrow(
+      /between the base and top/,
+    );
+  });
+
+  it('open-top pocket cuts every pocket layer through to the top', () => {
+    const r = buildInsert(makeVase(), {
+      ...base,
+      mode: 'topLoad',
+      box: [8 * IN, 8 * IN, 7 * IN],
+      thicknesses: [IN, 2 * IN],
+      baseLayers: [IN],
+      topLayers: [],
+    });
+    expect(r.sections[0]).toBe('base');
+    expect(r.layers[0].loops).toHaveLength(1); // closed base is solid
+    for (let i = 1; i < r.layers.length; i++) {
+      expect(r.sections[i]).toBe('pocket');
+      expect(r.layers[i].loops.length).toBeGreaterThan(1); // open to the top
+    }
+    expect(r.report.topOpen).toBe(true);
+    expect(r.report.headroom).toBeCloseTo(7 * IN - IN - 140, 1);
+    expect(r.baseCount).toBe(r.layers.length);
+  });
+
+  it('closed top adds solid lid layers above the item', () => {
+    const r = buildInsert(makeVase(), {
+      ...base,
+      mode: 'topLoad',
+      box: [8 * IN, 8 * IN, 8 * IN],
+      thicknesses: [IN / 2, IN, 2 * IN],
+      baseLayers: [IN],
+      topLayers: [IN],
+    });
+    const last = r.layers.length - 1;
+    expect(r.sections[last]).toBe('top');
+    expect(r.layers[last].loops).toHaveLength(1);
+    expect(r.roles[last]).toBe('lid');
+  });
+});

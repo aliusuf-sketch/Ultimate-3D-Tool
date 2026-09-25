@@ -27,6 +27,8 @@ import { computeBBox, transformMesh } from './transform';
 
 export type InsertMode = 'topLoad' | 'twoPart' | 'contour';
 export type LayerRole = 'base' | 'lid' | 'layer';
+/** Where a layer sits: user base layers, the pocket between, or user top layers. */
+export type LayerSection = 'base' | 'pocket' | 'top';
 
 export interface InsertSettings {
   axis: StackAxis;
@@ -43,6 +45,10 @@ export interface InsertSettings {
   preload: number; // mm the item may press into the layer above/below (foam compresses)
   minCushion: number; // mm of foam wanted on every side
   mode: InsertMode;
+  /** Solid base layers (bottom-up, mm). [] = open base. Omit for the automatic cushion plan. */
+  baseLayers?: number[];
+  /** Solid top layers (bottom-up, mm). [] = open top. Omit for the automatic cushion plan. */
+  topLayers?: number[];
   parting: number; // number of base layers; 0 = auto
   placement: 'auto' | 'center';
   notches: boolean;
@@ -65,6 +71,7 @@ export interface InsertResult {
   thickness: number[];
   baseCount: number; // layers [0, baseCount) are the base
   topLoad: boolean; // open-top pocket: the item lifts out of the top
+  sections: LayerSection[];
   rect: [number, number]; // layer outline size (mm)
   stackHeight: number;
   itemSize: [number, number, number];
@@ -86,6 +93,8 @@ export interface InsertReport {
   foamVolume: number; // mm³ of foam in the layers (after cutting)
   islands: number; // loose foam pieces kept (glue these in)
   preloaded: number; // mm the item presses into the foam above
+  topOpen: boolean;
+  headroom: number; // open top: mm between the item and the box lid
   warnings: string[];
 }
 
@@ -158,8 +167,10 @@ export function planStack(
     layering: 'fewest' | 'finest';
     placement: 'auto' | 'center';
     preload?: number;
+    shell?: Shell;
   },
 ): InsertPlan {
+  if (opts.shell) return planShell(H, itemH, thicknesses, opts, opts.shell);
   const ts = [...new Set(thicknesses.filter((t) => t > 0).map((t) => Math.round(t * U)))].sort(
     (a, b) => b - a,
   );
@@ -265,6 +276,113 @@ export function planStack(
     perm();
   }
   return best!.plan;
+}
+
+/** User-chosen solid layers under and over the pocket. */
+export interface Shell {
+  base: number[]; // bottom-up thicknesses (mm); empty = open base (item on the box floor)
+  top: number[]; // bottom-up thicknesses (mm); empty = open top (item lifts out of the top)
+}
+
+/**
+ * Plan with fixed base/top layers: the pocket between them is filled from the available
+ * thicknesses; the item rests on the base. With a closed top, pocket boundaries are
+ * arranged so one lands as close as possible over the item (least vertical play).
+ */
+function planShell(
+  H: number,
+  itemH: number,
+  thicknesses: number[],
+  opts: { compress: number; layering: 'fewest' | 'finest'; preload?: number },
+  shell: Shell,
+): InsertPlan {
+  const ts = [...new Set(thicknesses.filter((t) => t > 0).map((t) => Math.round(t * U)))].sort(
+    (a, b) => b - a,
+  );
+  if (!ts.length) throw new Error('Enable at least one foam thickness');
+  const baseU = shell.base.reduce((a, t) => a + Math.round(t * U), 0);
+  const topU = shell.top.reduce((a, t) => a + Math.round(t * U), 0);
+  const HU = Math.round(H * U);
+  const PU = HU - baseU - topU; // pocket height to fill
+  const hU = Math.round(itemH * U);
+  const preU = Math.round((opts.preload ?? 0) * U);
+  const f = (v: number) => String(Math.round(v * 10) / 10);
+  if (PU + Math.round(opts.compress * U) + preU < hU) {
+    throw new Error(
+      `Item is ${f(itemH)} mm tall but only ${f(PU / U)} mm is left between the base and top layers — ` +
+        'use fewer/thinner base or top layers, or a deeper box',
+    );
+  }
+  const maxU = PU + Math.round(Math.max(0, opts.compress) * U);
+  const vectors: { counts: number[]; sum: number; n: number }[] = [];
+  const counts = new Array(ts.length).fill(0);
+  const rec = (k: number, sum: number, n: number) => {
+    if (k === ts.length) {
+      if (n > 0 && sum > PU - ts[ts.length - 1] - 1 && sum + preU >= hU) {
+        vectors.push({ counts: counts.slice(), sum, n });
+      }
+      return;
+    }
+    for (let c = 0; n + c <= 40 && sum + c * ts[k] <= maxU; c++) {
+      counts[k] = c;
+      rec(k + 1, sum + c * ts[k], n + c);
+    }
+    counts[k] = 0;
+  };
+  rec(0, 0, 0);
+  if (!vectors.length) throw new Error('No combination of the chosen foam fills the pocket');
+  const fillCost = (sum: number) => (sum >= PU ? (sum - PU) / U : ((PU - sum) / U) * 20);
+  const bestFill = Math.min(...vectors.map((v) => Math.round(fillCost(v.sum) * 2)));
+  const pool = vectors.filter((v) => Math.round(fillCost(v.sum) * 2) === bestFill);
+  const topOpen = shell.top.length === 0;
+
+  let best: { key: number[]; seq: number[]; sum: number; gap: number } | null = null;
+  let budget = 40000;
+  const evaluate = (seq: number[], sum: number) => {
+    let gap = 0;
+    if (!topOpen) {
+      // Next boundary at or above the item top (pocket boundaries, then the top layers).
+      let b = 0,
+        next = sum;
+      for (const t of seq) {
+        b += t;
+        if (b >= hU - preU && b < next) next = b;
+      }
+      gap = Math.max(0, (next - hU) / U);
+    }
+    const n = seq.length;
+    const key = [Math.round(gap * 2), opts.layering === 'fewest' ? n : -n];
+    if (!best || lexLess(key, best.key)) best = { key, seq: seq.slice(), sum, gap };
+  };
+  for (const v of pool) {
+    const c = v.counts.slice();
+    const seq: number[] = [];
+    const perm = () => {
+      if (budget <= 0) return;
+      if (seq.length === v.n) {
+        budget--;
+        evaluate(seq, v.sum);
+        return;
+      }
+      for (let k = 0; k < ts.length; k++) {
+        if (!c[k]) continue;
+        c[k]--;
+        seq.push(ts[k]);
+        perm();
+        seq.pop();
+        c[k]++;
+      }
+    };
+    perm();
+  }
+  const b = best!;
+  const total = baseU + b.sum + topU;
+  return {
+    seq: [...shell.base, ...b.seq.map((t) => t / U), ...shell.top],
+    itemZ: baseU / U,
+    fillError: (total - HU) / U,
+    topGap: b.gap,
+  };
 }
 
 function lexLess(a: number[], b: number[]): boolean {
@@ -379,6 +497,8 @@ export function smallestBox(
   cushion: number,
   clearance: number,
   boxes: [number, number, number][] = STANDARD_BOXES_MM,
+  /** Fixed foam under/over the item (mm); defaults to `cushion` each. */
+  vertical?: { below: number; above: number },
 ) {
   let best: {
     box: [number, number, number];
@@ -389,7 +509,12 @@ export function smallestBox(
   for (const box of boxes) {
     for (const o of ORIENTATIONS) {
       // Boxes can be used on any side; the preset lists L >= W, H is free.
-      if (fitMargin(orientedDims(src, o.axis, o.turn90), box, clearance) >= cushion) {
+      const d = orientedDims(src, o.axis, o.turn90);
+      const ok = vertical
+        ? Math.min((box[0] - d[0]) / 2, (box[1] - d[1]) / 2) - clearance >= cushion &&
+          box[2] >= vertical.below + d[2] + vertical.above
+        : fitMargin(d, box, clearance) >= cushion;
+      if (ok) {
         const volume = box[0] * box[1] * box[2];
         if (!best || volume < best.volume) best = { box, ...o, volume };
       }
@@ -432,7 +557,10 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
     );
   }
 
-  const plan = planStack(H, size[2], s.thicknesses, s);
+  const shell: Shell | undefined =
+    s.baseLayers && s.topLayers ? { base: s.baseLayers, top: s.topLayers } : undefined;
+  const topOpen = !!shell && shell.top.length === 0;
+  const plan = planStack(H, size[2], s.thicknesses, { ...s, shell });
   const seq = plan.seq;
   const n = seq.length;
   const B = [0];
@@ -464,7 +592,7 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
   let itemTop = off[2] + size[2];
   let preloaded = 0;
   for (const b of B) {
-    if (b > off[2] && b < itemTop && itemTop - b <= s.preload + 1e-6) {
+    if (!topOpen && b > off[2] && b < itemTop && itemTop - b <= s.preload + 1e-6) {
       preloaded = itemTop - b;
       itemTop = b;
       break;
@@ -518,8 +646,9 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
     };
     if (s.mode === 'topLoad') {
       // One open-top pocket: every layer the item touches widens upward, so the item
-      // lifts straight out of the top; the layers above it are solid lid pads.
-      baseCount = Math.max(1, last + 1);
+      // lifts straight out of the top; the layers above it are solid lid pads, or, with an
+      // open top, cut through to the top of the stack.
+      baseCount = topOpen ? n : Math.max(1, last + 1);
     } else if (s.parting > 0) {
       baseCount = Math.min(n - 1, Math.max(1, Math.round(s.parting)));
     } else {
@@ -674,6 +803,9 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       if (b[k] && runBot[k] < Infinity) playDown = Math.min(playDown, runBot[k] - B[j + 1]);
   }
   playUp = preloaded > 0 ? 0 : Math.max(0, playUp);
+  // Open top: nothing but the box lid above the item.
+  const headroom = topOpen ? Math.max(0, H - (off[2] + size[2])) : 0;
+  if (topOpen) playUp = 0;
   playDown = Math.max(0, playDown);
   yield 0.97;
 
@@ -685,10 +817,15 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
     warnings.push(
       `Side walls are ${fmt(sideWall)} mm — less than the ${fmt(s.minCushion)} mm cushion`,
     );
-  if (bottomCushion < s.minCushion - 0.05)
+  // With chosen base/top layers the cushion above/below is the user's call.
+  if (!shell && bottomCushion < s.minCushion - 0.05)
     warnings.push(`Only ${fmt(bottomCushion)} mm of solid foam under the item`);
-  if (topCushion < s.minCushion - 0.05)
+  if (!shell && topCushion < s.minCushion - 0.05)
     warnings.push(`Only ${fmt(topCushion)} mm of solid foam above the item`);
+  if (topOpen && headroom > 3)
+    warnings.push(
+      `Open top: ${fmt(headroom)} mm between the item and the box lid — use a shallower box, add a base layer, or close the top`,
+    );
   if (plan.fillError < -0.5)
     warnings.push(
       `Stack is ${fmt(-plan.fillError)} mm short of the box height — add a thinner sheet`,
@@ -700,7 +837,7 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       `Item can move ${fmt(playUp + playDown)} mm up/down — add a thinner foam option (e.g. ¼ in), let the item press that much into the foam, or try another orientation`,
     );
   }
-  if (s.mode === 'topLoad' && last === n - 1)
+  if (s.mode === 'topLoad' && last === n - 1 && !topOpen)
     warnings.push('Item reaches the top of the stack — no lid pad above it; use a deeper box');
   if (s.mode === 'twoPart' && first === last)
     warnings.push('Item sits inside a single layer; lid/base split is at its top');
@@ -711,6 +848,15 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
     thickness: seq,
     baseCount,
     topLoad: s.mode === 'topLoad',
+    sections: seq.map((_, i) =>
+      !shell
+        ? 'pocket'
+        : i < shell.base.length
+          ? 'base'
+          : i >= n - shell.top.length
+            ? 'top'
+            : 'pocket',
+    ) as LayerSection[],
     rect,
     stackHeight: S,
     itemSize: size,
@@ -729,6 +875,8 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       foamVolume,
       islands,
       preloaded,
+      topOpen,
+      headroom,
       warnings,
     },
   };
@@ -743,11 +891,20 @@ const fmt = (v: number) => String(Math.round(v * 10) / 10);
 export function rankOrientations(src: [number, number, number], s: InsertSettings) {
   const out = ORIENTATIONS.map((o) => {
     const dims = orientedDims(src, o.axis, o.turn90);
-    const margin = fitMargin(dims, s.box, s.clearance);
+    const shell =
+      s.baseLayers && s.topLayers ? { base: s.baseLayers, top: s.topLayers } : undefined;
+    // With chosen base/top layers only the sides need the cushion.
+    const margin = shell
+      ? Math.min((s.box[0] - dims[0]) / 2, (s.box[1] - dims[1]) / 2) - s.clearance
+      : fitMargin(dims, s.box, s.clearance);
     let gap = Infinity;
     if (margin >= 0 && s.thicknesses.length) {
       try {
-        gap = planStack(s.box[2], dims[2], s.thicknesses, s).topGap;
+        gap = planStack(s.box[2], dims[2], s.thicknesses, { ...s, shell }).topGap;
+        // Open top: rank by the space left to the box lid instead.
+        if (shell && shell.top.length === 0) {
+          gap = Math.max(0, s.box[2] - shell.base.reduce((a, t) => a + t, 0) - dims[2]);
+        }
       } catch {
         gap = Infinity;
       }

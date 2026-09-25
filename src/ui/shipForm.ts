@@ -17,6 +17,14 @@ const UNIT_FIELDS = [
   'boxH',
   'boxWall',
   'minCushion',
+  'baseT0',
+  'baseT1',
+  'baseT2',
+  'baseT3',
+  'topT0',
+  'topT1',
+  'topT2',
+  'topT3',
   'foamT0',
   'foamT1',
   'foamT2',
@@ -28,6 +36,10 @@ export const FOAM_ROWS = 4;
 export const SHIP_FIELDS = new Set([
   ...UNIT_FIELDS,
   'stlUnits',
+  'baseMode',
+  'topMode',
+  'baseCount',
+  'topCount',
   'boxMeasure',
   'itemScale',
   'itemLock',
@@ -250,10 +262,56 @@ export class ShipForm {
       : `Scale X ${f[0]} % · Y ${f[1]} % · Z ${f[2]} %`;
   }
 
+  /** Chosen base or top layer thicknesses (mm, bottom-up); [] when that side is open. */
+  shellLayers(kind: 'base' | 'top'): number[] {
+    if (this.radio(`${kind}Mode`) !== 'closed') return [];
+    const n = Math.max(1, Math.min(4, +this.select(`${kind}Count`) || 1));
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = this.len(`${kind}T${i}`, IN);
+      if (t > 0) out.push(t);
+    }
+    return out;
+  }
+
+  /** Show only the thickness inputs in use; hide them entirely when a side is open. */
+  syncShellUi(): void {
+    for (const kind of ['base', 'top'] as const) {
+      const closed = this.radio(`${kind}Mode`) === 'closed';
+      const ui = document.getElementById(`${kind}LayersUi`);
+      if (ui) ui.hidden = !closed;
+      const n = +this.select(`${kind}Count`) || 1;
+      for (let i = 0; i < 4; i++) {
+        const input = this.f.form.elements.namedItem(`${kind}T${i}`) as HTMLInputElement;
+        const label = input.closest('label');
+        if (label) label.hidden = i >= n;
+      }
+    }
+  }
+
+  shellHint(): string {
+    const b = this.shellLayers('base');
+    const t = this.shellLayers('top');
+    const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+    const L = (v: number) => this.fmtLen(v);
+    return (
+      (b.length
+        ? `Base ${b.length} layer${b.length > 1 ? 's' : ''} · ${L(sum(b))}`
+        : 'Open base (item on the box floor)') +
+      ' · ' +
+      (t.length
+        ? `top ${t.length} layer${t.length > 1 ? 's' : ''} · ${L(sum(t))}`
+        : 'open top (item lifts out)') +
+      '. The pocket layers fill the rest.'
+    );
+  }
+
   settings(): InsertSettings {
     const o = this.orientation();
     return {
       ...o,
+      baseLayers: this.shellLayers('base'),
+      topLayers: this.shellLayers('top'),
       scale: this.scale(),
       box: this.box(),
       thicknesses: this.foam()
@@ -267,7 +325,7 @@ export class ShipForm {
       minCushion: this.len('minCushion', IN),
       mode: this.select('insertMode') as InsertSettings['mode'],
       parting: Math.round(this.f.num('parting', 0, 0)),
-      placement: this.select('placement') as InsertSettings['placement'],
+      placement: 'auto',
       notches: this.f.checked('notches'),
       notchDiameter: this.f.num('notchDiameter', 25, 1),
       minIsland: this.f.num('minIsland', 4, 0) * 100,

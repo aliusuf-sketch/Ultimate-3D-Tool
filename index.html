@@ -345,6 +345,167 @@
             </fieldset>
 
             <fieldset data-mode="ship">
+              <legend>Base &amp; top layers</legend>
+              <div class="shell-block">
+                <div class="field">
+                  <span class="label" id="baseModeLabel">Base</span>
+                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="baseModeLabel">
+                    <label
+                      ><input type="radio" name="baseMode" value="closed" checked /><span
+                        >Closed</span
+                      ></label
+                    >
+                    <label
+                      ><input type="radio" name="baseMode" value="open" /><span>Open</span></label
+                    >
+                  </div>
+                </div>
+                <div class="shell-layers" id="baseLayersUi">
+                  <label class="field"
+                    ><span class="label">Layers</span>
+                    <select name="baseCount">
+                      <option value="1" selected>1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select></label
+                  >
+                  <div class="shell-thk">
+                    <span class="label"
+                      >Thickness of each (<span class="u">in</span>), bottom to top</span
+                    >
+                    <div class="shell-thk-inputs">
+                      <label class="field"
+                        ><span class="label">#1</span>
+                        <input
+                          type="number"
+                          name="baseT0"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Base layer 1 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#2</span>
+                        <input
+                          type="number"
+                          name="baseT1"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Base layer 2 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#3</span>
+                        <input
+                          type="number"
+                          name="baseT2"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Base layer 3 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#4</span>
+                        <input
+                          type="number"
+                          name="baseT3"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Base layer 4 thickness"
+                      /></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="shell-block">
+                <div class="field">
+                  <span class="label" id="topModeLabel">Top</span>
+                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="topModeLabel">
+                    <label
+                      ><input type="radio" name="topMode" value="open" checked /><span
+                        >Open</span
+                      ></label
+                    >
+                    <label
+                      ><input type="radio" name="topMode" value="closed" /><span
+                        >Closed</span
+                      ></label
+                    >
+                  </div>
+                </div>
+                <div class="shell-layers" id="topLayersUi" hidden>
+                  <label class="field"
+                    ><span class="label">Layers</span>
+                    <select name="topCount">
+                      <option value="1" selected>1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select></label
+                  >
+                  <div class="shell-thk">
+                    <span class="label"
+                      >Thickness of each (<span class="u">in</span>), bottom to top</span
+                    >
+                    <div class="shell-thk-inputs">
+                      <label class="field"
+                        ><span class="label">#1</span>
+                        <input
+                          type="number"
+                          name="topT0"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Top layer 1 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#2</span>
+                        <input
+                          type="number"
+                          name="topT1"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Top layer 2 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#3</span>
+                        <input
+                          type="number"
+                          name="topT2"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Top layer 3 thickness"
+                      /></label>
+                      <label class="field"
+                        ><span class="label">#4</span>
+                        <input
+                          type="number"
+                          name="topT3"
+                          value="1"
+                          min="0.05"
+                          step="any"
+                          inputmode="decimal"
+                          aria-label="Top layer 4 thickness"
+                      /></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="hint" id="shellHint"></p>
+            </fieldset>
+
+            <fieldset data-mode="ship">
               <legend>Foam sheets</legend>
               <p class="hint hint-top">Tick the thicknesses you can buy. Price is per sheet.</p>
               <div class="foam-table" role="group" aria-label="Foam thicknesses">
@@ -451,7 +612,7 @@
               >
               <div class="row">
                 <label class="field"
-                  ><span class="label">Min foam around item (<span class="u">in</span>)</span>
+                  ><span class="label">Min side foam (<span class="u">in</span>)</span>
                   <input
                     type="number"
                     name="minCushion"
@@ -495,14 +656,7 @@
               </div>
               <div class="row">
                 <label class="field"
-                  ><span class="label">Item height</span>
-                  <select name="placement">
-                    <option value="auto" selected>Snug (least play)</option>
-                    <option value="center">Centred</option>
-                  </select></label
-                >
-                <label class="field"
-                  ><span class="label">Base layers (0 = auto)</span>
+                  ><span class="label">Two-part split after layer (0 = auto)</span>
                   <input
                     type="number"
                     name="parting"
