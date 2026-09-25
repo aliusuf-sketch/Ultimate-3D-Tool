@@ -7,12 +7,27 @@ export const IN = 25.4;
 export type Units = 'in' | 'mm';
 
 /** Field names whose value is shown in the selected unit (stored in mm internally). */
-const UNIT_FIELDS = ['boxL', 'boxW', 'boxH', 'minCushion', 'foamT0', 'foamT1', 'foamT2', 'foamT3'];
+const UNIT_FIELDS = [
+  'itemX',
+  'itemY',
+  'itemZ',
+  'boxL',
+  'boxW',
+  'boxH',
+  'minCushion',
+  'foamT0',
+  'foamT1',
+  'foamT2',
+  'foamT3',
+];
 export const FOAM_ROWS = 4;
 
 /** Every field that affects the insert geometry (changes trigger a re-plan). */
 export const SHIP_FIELDS = new Set([
   ...UNIT_FIELDS,
+  'stlUnits',
+  'itemScale',
+  'itemLock',
   'shipAxis',
   'turn90',
   'flip',
@@ -44,6 +59,7 @@ export const PRICE_FIELDS = new Set([
 
 export class ShipForm {
   private currentUnits: Units = 'in';
+  private modelSize: [number, number, number] = [0, 0, 0];
 
   constructor(private f: SettingsForm) {}
 
@@ -125,10 +141,77 @@ export class ShipForm {
     (this.f.form.elements.namedItem('turn90') as HTMLInputElement).checked = turn90;
   }
 
+  // ---- Item size / scale (STL frame) ----
+
+  /** Raw STL bounding-box size (file units). */
+  setModelSize(size: [number, number, number]): void {
+    this.modelSize = size;
+  }
+
+  private stlUnit(): number {
+    return +this.select('stlUnits') || 1;
+  }
+
+  /** Item size at 100 % in mm (file size x STL units). */
+  originalSize(): [number, number, number] {
+    const u = this.stlUnit();
+    return this.modelSize.map((v) => v * u) as [number, number, number];
+  }
+
+  /** Current target item size in mm. */
+  itemSize(): [number, number, number] {
+    const o = this.originalSize();
+    return [this.len('itemX', o[0]), this.len('itemY', o[1]), this.len('itemZ', o[2])];
+  }
+
+  /** Current item bounding-box size in mm (alias used by orientation/box helpers). */
+  scaledSize(): [number, number, number] {
+    return this.itemSize();
+  }
+
+  /** Scale relative to the raw STL numbers (includes the unit conversion). */
+  scale(): [number, number, number] {
+    const s = this.itemSize();
+    return s.map((v, i) => (this.modelSize[i] > 0 ? v / this.modelSize[i] : 1)) as [
+      number,
+      number,
+      number,
+    ];
+  }
+
+  /** Scale relative to the original size (what the user thinks of as %). */
+  factors(): [number, number, number] {
+    const o = this.originalSize();
+    const s = this.itemSize();
+    return s.map((v, i) => (o[i] > 0 ? v / o[i] : 1)) as [number, number, number];
+  }
+
+  setItemFactors(k: [number, number, number]): void {
+    const o = this.originalSize();
+    this.setLen('itemX', o[0] * k[0]);
+    this.setLen('itemY', o[1] * k[1]);
+    this.setLen('itemZ', o[2] * k[2]);
+    if (k[0] === k[1] && k[1] === k[2]) this.f.set('itemScale', k[0] * 100);
+  }
+
+  /** After editing one size field: keep proportions if locked. */
+  onItemSizeEdited(axis: 0 | 1 | 2): void {
+    const k = this.factors()[axis];
+    if (this.f.checked('itemLock') && k > 0) this.setItemFactors([k, k, k]);
+  }
+
+  scaleHint(): string {
+    const f = this.factors().map((v) => Math.round(v * 1000) / 10);
+    return f[0] === f[1] && f[1] === f[2]
+      ? `Scale ${f[0]} %`
+      : `Scale X ${f[0]} % · Y ${f[1]} % · Z ${f[2]} %`;
+  }
+
   settings(): InsertSettings {
     const o = this.orientation();
     return {
       ...o,
+      scale: this.scale(),
       box: this.box(),
       thicknesses: this.foam()
         .filter((r) => r.on && r.thickness > 0)

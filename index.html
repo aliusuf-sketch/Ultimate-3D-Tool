@@ -141,6 +141,54 @@
             </section>
 
             <fieldset data-mode="ship">
+              <legend>Item size</legend>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">STL units</span>
+                  <select name="stlUnits">
+                    <option value="1" selected>mm</option>
+                    <option value="10">cm</option>
+                    <option value="25.4">inch</option>
+                  </select></label
+                >
+                <label class="field"
+                  ><span class="label">Scale %</span>
+                  <input
+                    type="number"
+                    name="itemScale"
+                    value="100"
+                    min="1"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <span class="label" id="itemSizeLabel"
+                >Size along the STL's X / Y / Z (<span class="u">in</span>)</span
+              >
+              <div class="row row-3" role="group" aria-labelledby="itemSizeLabel">
+                <label class="field"
+                  ><span class="label">X</span>
+                  <input type="number" name="itemX" min="0.01" step="any" inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Y</span>
+                  <input type="number" name="itemY" min="0.01" step="any" inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Z</span>
+                  <input type="number" name="itemZ" min="0.01" step="any" inputmode="decimal"
+                /></label>
+              </div>
+              <div class="size-tools">
+                <label class="check"
+                  ><input type="checkbox" name="itemLock" checked /> Lock proportions</label
+                >
+                <button class="btn btn-small" type="button" id="itemResetBtn">Original size</button>
+              </div>
+              <p class="hint" id="itemScaleHint">Scale 100 %</p>
+            </fieldset>
+
+            <fieldset data-mode="ship">
               <legend>Box (inside dimensions)</legend>
               <div class="field">
                 <span class="label" id="unitsLabel">Units</span>
@@ -313,7 +361,10 @@
               <label class="field"
                 ><span class="label">Insert style</span>
                 <select name="insertMode">
-                  <option value="twoPart" selected>Base + lid (item lifts straight out)</option>
+                  <option value="topLoad" selected>
+                    Open-top pocket (lift the item out of the top)
+                  </option>
+                  <option value="twoPart">Base + lid split at the widest point</option>
                   <option value="contour">Follow the shape in every layer (soft foam)</option>
                 </select></label
               >

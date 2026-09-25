@@ -25,13 +25,15 @@ import { runSync, sliceMesh } from './slice';
 import { buildTopology } from './topology';
 import { computeBBox, transformMesh } from './transform';
 
-export type InsertMode = 'twoPart' | 'contour';
+export type InsertMode = 'topLoad' | 'twoPart' | 'contour';
 export type LayerRole = 'base' | 'lid' | 'layer';
 
 export interface InsertSettings {
   axis: StackAxis;
   turn90: boolean;
   flip: boolean;
+  /** Per-axis scale of the STL in its own frame (X, Y, Z as loaded), 1 = 100 %. */
+  scale?: [number, number, number];
   box: [number, number, number]; // inner L, W, H (mm)
   thicknesses: number[]; // available sheet thicknesses (mm)
   layering: 'fewest' | 'finest';
@@ -62,6 +64,7 @@ export interface InsertResult {
   roles: LayerRole[];
   thickness: number[];
   baseCount: number; // layers [0, baseCount) are the base
+  topLoad: boolean; // open-top pocket: the item lifts out of the top
   rect: [number, number]; // layer outline size (mm)
   stackHeight: number;
   itemSize: [number, number, number];
@@ -90,8 +93,18 @@ export interface InsertReport {
 // Orientation
 
 /** Rotate the item so the chosen axis is up, optionally turn 90° about Z / flip over. */
-export function orientItem(mesh: Mesh, axis: StackAxis, turn90: boolean, flip: boolean) {
-  const p = transformMesh(mesh, axis, 1).mesh.positions;
+export function orientItem(
+  mesh: Mesh,
+  axis: StackAxis,
+  turn90: boolean,
+  flip: boolean,
+  scale: [number, number, number] = [1, 1, 1],
+) {
+  // Scale is given in the STL's own frame; permute it into the oriented frame.
+  const [a, b, c] = scale;
+  const k: [number, number, number] =
+    axis === 'y' ? [a, c, b] : axis === 'x' ? [c, b, a] : [a, b, c];
+  const p = transformMesh(mesh, axis, k).mesh.positions;
   if (turn90 || flip) {
     for (let i = 0; i < p.length; i += 3) {
       let x = p[i],
@@ -398,7 +411,7 @@ export function buildInsert(mesh: Mesh, s: InsertSettings): InsertResult {
 
 export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<number, InsertResult> {
   const warnings: string[] = [];
-  const { positions, size } = orientItem(mesh, s.axis, s.turn90, s.flip);
+  const { positions, size } = orientItem(mesh, s.axis, s.turn90, s.flip, s.scale);
   const [L, W, H] = s.box;
   if (size[2] > H)
     throw new Error(`Item is ${fmt(size[2])} mm tall but the box is only ${fmt(H)} mm deep`);
@@ -492,7 +505,11 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       for (let i = 0; i < n; i++) v += seq[i] * (i < k ? preA[i] : sufA[i]);
       return v;
     };
-    if (s.parting > 0) {
+    if (s.mode === 'topLoad') {
+      // One open-top pocket: every layer the item touches widens upward, so the item
+      // lifts straight out of the top; the layers above it are solid lid pads.
+      baseCount = Math.max(1, last + 1);
+    } else if (s.parting > 0) {
       baseCount = Math.min(n - 1, Math.max(1, Math.round(s.parting)));
     } else {
       // Parting boundaries inside the item span; least wasted cavity wins, then the middle.
@@ -520,7 +537,7 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
 
   // Finger notches: in the upper base layers, both sides across the item's narrow width.
   const notches: { x: number; y: number; r: number; fromZ: number }[] = [];
-  if (s.notches && s.mode === 'twoPart' && baseCount > first) {
+  if (s.notches && s.mode !== 'contour' && baseCount > first) {
     const r = s.notchDiameter / 2;
     const alongX = size[0] >= size[1];
     const cx = off[0] + size[0] / 2,
@@ -543,7 +560,9 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       // Keep the notch inside the outline with some wall left.
       const wall = Math.min(nx2 - r, rect[0] - nx2 - r, ny2 - r, rect[1] - ny2 - r);
       if (wall > 3) {
-        const depth = Math.min((B[baseCount] - off[2]) * 0.6, s.notchDiameter * 1.5);
+        // Top-loading pockets get deeper notches so fingers reach the item's sides.
+        const reach = s.notchDiameter * (s.mode === 'topLoad' ? 2.5 : 1.5);
+        const depth = Math.min((B[baseCount] - off[2]) * 0.6, reach);
         notches.push({ x: nx2, y: ny2, r, fromZ: B[baseCount] - Math.max(depth, 1) });
       } else {
         warnings.push('Not enough side wall for finger notches');
@@ -670,6 +689,8 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
       `Item can move ${fmt(playUp + playDown)} mm up/down — add a thinner foam option (e.g. ¼ in), let the item press that much into the foam, or try another orientation`,
     );
   }
+  if (s.mode === 'topLoad' && last === n - 1)
+    warnings.push('Item reaches the top of the stack — no lid pad above it; use a deeper box');
   if (s.mode === 'twoPart' && first === last)
     warnings.push('Item sits inside a single layer; lid/base split is at its top');
 
@@ -678,6 +699,7 @@ export function* buildInsertIter(mesh: Mesh, s: InsertSettings): Generator<numbe
     roles,
     thickness: seq,
     baseCount,
+    topLoad: s.mode === 'topLoad',
     rect,
     stackHeight: S,
     itemSize: size,

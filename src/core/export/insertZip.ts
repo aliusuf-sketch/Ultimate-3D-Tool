@@ -86,7 +86,7 @@ function readme(x: InsertExportInput, opts: InsertExportOptions): string {
     `Layer outline:     ${f(r.rect[0])} x ${f(r.rect[1])} mm`,
     `Stack:             ${r.layers.length} layers, ${f(r.stackHeight)} mm (${inch(r.stackHeight)})`,
     `Foam around item:  sides ${f(rep.sideWall)} mm, below ${f(rep.bottomCushion)} mm, above ${f(rep.topCushion)} mm`,
-    `Vertical play:     up ${f(rep.playUp)} mm, down ${f(rep.playDown)} mm${rep.preloaded > 0 ? ` (item presses ${f(rep.preloaded)} mm into the lid)` : ''}`,
+    `Vertical play:     up ${f(rep.playUp)} mm, down ${f(rep.playDown)} mm${rep.preloaded > 0.05 ? ` (item presses ${f(rep.preloaded)} mm into the lid)` : ''}`,
     '',
     'Layers (bottom to top)',
     '----------------------',
@@ -112,14 +112,24 @@ function readme(x: InsertExportInput, opts: InsertExportOptions): string {
     '',
     'Assembly',
     '--------',
-    r.roles.includes('base')
-      ? [
-          `1. Glue the base layers (L01-${layerName(r.baseCount - 1)}, engraved "B") into one block, L01 at the bottom.`,
-          `2. Glue the lid layers (${layerName(r.baseCount)}-${layerName(r.layers.length - 1)}, engraved "T") into a second block.`,
-          '3. Put the base in the box, drop the item in, close with the lid block, tape the box.',
-          '   The cavities have no undercuts, so the item lifts straight out.',
-        ].join('\n')
-      : '1. Stack the layers in order, L01 at the bottom, placing the item as you go.',
+    r.roles.includes('base') && !r.roles.includes('lid')
+      ? `1. Glue all layers (L01-${layerName(r.layers.length - 1)}) into one block, L01 at the bottom; drop the item in from the top.`
+      : r.topLoad
+        ? [
+            `1. Glue the pocket layers (L01-${layerName(r.baseCount - 1)}, engraved "B") into one block, L01 at the bottom.`,
+            `2. Glue the lid pad layers (${layerName(r.baseCount)}-${layerName(r.layers.length - 1)}, engraved "T") into a second block.`,
+            '3. Put the pocket block in the box and drop the item in from the top.',
+            '   To unpack: lift the lid pad off, then pull the item straight up out of the pocket',
+            '   (use the finger notches on either side).',
+          ].join('\n')
+        : r.roles.includes('base')
+          ? [
+              `1. Glue the base layers (L01-${layerName(r.baseCount - 1)}, engraved "B") into one block, L01 at the bottom.`,
+              `2. Glue the lid layers (${layerName(r.baseCount)}-${layerName(r.layers.length - 1)}, engraved "T") into a second block.`,
+              '3. Put the base in the box, drop the item in, close with the lid block, tape the box.',
+              '   The cavities have no undercuts, so the item lifts straight out.',
+            ].join('\n')
+          : '1. Stack the layers in order, L01 at the bottom, placing the item as you go.',
     rep.islands > 0
       ? `Note: ${rep.islands} loose foam insert(s) sit inside cavities — glue them to the layer below.`
       : '',

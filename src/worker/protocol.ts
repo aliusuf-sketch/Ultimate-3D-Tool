@@ -40,6 +40,7 @@ export interface InsertSummary {
   thickness: number[];
   roles: LayerRole[];
   baseCount: number;
+  topLoad: boolean;
   itemSize: [number, number, number];
   itemOffset: [number, number, number];
   report: InsertReport;

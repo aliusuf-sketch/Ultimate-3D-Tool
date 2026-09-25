@@ -55,6 +55,8 @@ const ui = {
   xray: $<HTMLInputElement>('xray'),
   autoOrientBtn: $<HTMLButtonElement>('autoOrientBtn'),
   smallestBoxBtn: $<HTMLButtonElement>('smallestBoxBtn'),
+  itemResetBtn: $<HTMLButtonElement>('itemResetBtn'),
+  itemScaleHint: $('itemScaleHint'),
 };
 
 const form = new SettingsForm($<HTMLFormElement>('settings'));
@@ -223,6 +225,9 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       reframeNext = true;
       baseAxis = form.axis();
       setSize([1, 1, 1]);
+      ship.setModelSize(m.size);
+      ship.setItemFactors([1, 1, 1]);
+      ui.itemScaleHint.textContent = ship.scaleHint();
       if (mode === 'ship') prepareShip(true);
       else compute();
       break;
@@ -369,7 +374,8 @@ function selectLayer(L: number): void {
   const z0 = layers.z[L * 2],
     z1 = layers.z[L * 2 + 1];
   if (mode === 'ship' && shipSummary) {
-    const role = shipSummary.roles[L];
+    const r0 = shipSummary.roles[L];
+    const role = shipSummary.topLoad ? (r0 === 'base' ? 'pocket' : 'lid pad') : r0;
     ui.readout.textContent =
       `${layerName(L)} · ${role === 'layer' ? '' : `${role} · `}` +
       `${thicknessLabel(shipSummary.thickness[L]).replace('in', ' in')} · z ${mm(z0)}–${mm(z1)} mm`;
@@ -610,14 +616,22 @@ function prepareShip(newItem: boolean): void {
   if (!model) return;
   const s = ship.settings();
   if (newItem) {
-    const best = rankOrientations(model.size, s)[0];
+    const maxDim = Math.max(...ship.itemSize());
+    if (maxDim < 25 && ship.originalSize()[0] === model.size[0]) {
+      toast(
+        `Item is only ${mm(maxDim)} mm across — if the STL is in inches or cm, change “STL units”`,
+        'info',
+        7000,
+      );
+    }
+    const best = rankOrientations(ship.scaledSize(), s)[0];
     if (best.margin >= s.minCushion) {
       ship.setOrientation(best.axis, best.turn90);
     } else {
-      const b = smallestBox(model.size, s.minCushion, s.clearance);
+      const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance);
       if (b) {
         ship.setBox(b.box);
-        const o = rankOrientations(model.size, ship.settings())[0];
+        const o = rankOrientations(ship.scaledSize(), ship.settings())[0];
         ship.setOrientation(o.axis, o.turn90);
         toast(
           `Box set to ${b.box.map((v) => ship.fmtLen(v, 2).split(' ')[0]).join(' × ')} ${ship.units} so the item fits with cushion`,
@@ -639,13 +653,27 @@ function onShipInput(name: string): void {
     renderShipStats();
     return;
   }
-  if (name === 'boxPreset') {
+  if (name === 'stlUnits') {
+    ship.setItemFactors([1, 1, 1]);
+    reframeNext = true;
+  } else if (name === 'itemScale') {
+    const k = form.num('itemScale', 100, 0.01) / 100;
+    ship.setItemFactors([k, k, k]);
+    reframeNext = true;
+  } else if (name === 'itemX' || name === 'itemY' || name === 'itemZ') {
+    ship.onItemSizeEdited(name === 'itemX' ? 0 : name === 'itemY' ? 1 : 2);
+    reframeNext = true;
+  } else if (name === 'itemLock' && form.checked('itemLock')) {
+    const k = ship.factors()[2];
+    ship.setItemFactors([k, k, k]);
+  } else if (name === 'boxPreset') {
     if (!ship.applyPreset()) return;
     reframeNext = true;
   } else if (name === 'boxL' || name === 'boxW' || name === 'boxH') {
     ship.syncPreset();
     reframeNext = true;
   }
+  ui.itemScaleHint.textContent = ship.scaleHint();
   if (PRICE_FIELDS.has(name)) return renderShipCost();
   if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
   if (
@@ -659,9 +687,9 @@ function onShipInput(name: string): void {
 ui.autoOrientBtn.addEventListener('click', () => {
   if (!model) return;
   const s = ship.settings();
-  const best = rankOrientations(model.size, s)[0];
+  const best = rankOrientations(ship.scaledSize(), s)[0];
   ship.setOrientation(best.axis, best.turn90);
-  const d = orientedDims(model.size, best.axis, best.turn90);
+  const d = orientedDims(ship.scaledSize(), best.axis, best.turn90);
   toast(
     `Item sits ${d.map((v) => mm(v)).join(' × ')} mm in the box` +
       (Number.isFinite(best.gap)
@@ -675,10 +703,10 @@ ui.autoOrientBtn.addEventListener('click', () => {
 ui.smallestBoxBtn.addEventListener('click', () => {
   if (!model) return toast('Load the item first', 'error');
   const s = ship.settings();
-  const b = smallestBox(model.size, s.minCushion, s.clearance);
+  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance);
   if (!b) return toast('No standard box is big enough — enter a custom size', 'error');
   ship.setBox(b.box);
-  const best = rankOrientations(model.size, ship.settings())[0];
+  const best = rankOrientations(ship.scaledSize(), ship.settings())[0];
   ship.setOrientation(best.axis, best.turn90);
   reframeNext = true;
   computeInsert();
@@ -698,6 +726,8 @@ function showShipError(message: string): void {
   renderShipCost();
   syncButtons();
 }
+
+const span = (a: number, b: number) => (a === b ? layerName(a) : `${layerName(a)}–${layerName(b)}`);
 
 function renderReport(): void {
   const grid = ui.reportGrid;
@@ -751,7 +781,10 @@ function renderReport(): void {
       ? ([
           [
             'Split',
-            `base L01–${layerName(S.baseCount - 1)} · lid ${layerName(S.baseCount)}–${layerName(S.thickness.length - 1)}`,
+            `${S.topLoad ? 'pocket' : 'base'} ${span(0, S.baseCount - 1)}` +
+              (S.baseCount < S.thickness.length
+                ? ` · ${S.topLoad ? 'lid pad' : 'lid'} ${span(S.baseCount, S.thickness.length - 1)}`
+                : ''),
           ],
         ] as [string, string][])
       : []),
@@ -761,7 +794,7 @@ function renderReport(): void {
     [
       'Vertical play',
       play < 0.05
-        ? r.preloaded > 0
+        ? r.preloaded > 0.05
           ? `none (presses ${mm(r.preloaded)} mm)`
           : 'none'
         : `${mm(play)} mm`,
@@ -848,3 +881,11 @@ function renderShipCost(): void {
     `${bits.join(' · ')} · sheets ${ft(S.sheetW)} × ${ft(S.sheetH)} ft · ` +
     `${bought > 0 ? Math.round((used / bought) * 100) : 0} % used`;
 }
+
+ui.itemResetBtn.addEventListener('click', () => {
+  if (!model) return;
+  ship.setItemFactors([1, 1, 1]);
+  ui.itemScaleHint.textContent = ship.scaleHint();
+  reframeNext = true;
+  computeInsertSoon();
+});

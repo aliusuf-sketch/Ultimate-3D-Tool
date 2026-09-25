@@ -27,13 +27,13 @@ Everything runs in your browser. Files are never uploaded, and there is no backe
 
 Switch to **Shipping insert** in the top bar to make laser-cut foam packaging that holds a 3D print securely in a box.
 
-1. Load the STL of the item (or **Load sample** for a vase).
+1. Load the STL of the item (or **Load sample** for a vase). Under **Item size**, set the STL's units (mm / cm / inch) and scale it by % or by exact X / Y / Z size (proportions locked or free).
 2. Enter the box's **inside** dimensions (inches or mm), pick a standard size, or click **Smallest box that fits**.
 3. Tick the foam thicknesses you can buy (½, 1, 2, 3 in by default) and their price per sheet.
 4. The planner then:
    - chooses the sheets and their order so the stack fills the box height, with the item resting on a layer and its top as close as possible under the next layer;
    - picks the orientation with the most foam and the least vertical play (or set it yourself);
-   - cuts each layer's cavity with a clearance gap. In **Base + lid** style the stack splits at the best parting layer and the cavities have no undercuts, so a rigid print drops into the base and the lid closes over it. **Follow the shape** cuts each layer to the item's own outline, for soft foam;
+   - cuts each layer's cavity with a clearance gap. The default **Open-top pocket** style glues every layer the item touches into one pocket block whose cavity only widens going up, so the item lifts straight out of the top; solid lid pads sit above it. In **Base + lid** style the stack splits at the best parting layer and the cavities have no undercuts, so a rigid print drops into the base and the lid closes over it. **Follow the shape** cuts each layer to the item's own outline, for soft foam;
    - adds finger notches so the item can be lifted out, and drops tiny loose foam bits.
 5. The **protection report** shows foam on each side, above and below, how far the item can still move vertically, and anything to fix. The corner card shows the cost per foam thickness.
 6. **Download ZIP**: one DXF/SVG per layer (named like `L02_base_2in`), sheets nested per thickness (`sheets/2in/…`), `cut_list.csv`, and a README with the stack order and gluing steps.

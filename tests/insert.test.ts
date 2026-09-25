@@ -165,3 +165,48 @@ describe('preload', () => {
     expect(planStack(6 * IN, 2 * IN + 1, [IN], { ...o, preload: 1.5 }).topGap).toBe(0);
   });
 });
+
+describe('top-loading pocket', () => {
+  it('opens every item layer upward and keeps the layers above solid', () => {
+    const r = buildInsert(makeVase(), {
+      ...base,
+      mode: 'topLoad',
+      box: [8 * IN, 8 * IN, 8 * IN],
+      thicknesses: [IN / 2, IN, 2 * IN],
+    });
+    expect(r.topLoad).toBe(true);
+    const cav = (i: number) =>
+      r.layers[i].loops.filter((l) => l.depth % 2 === 1).reduce((a, l) => a - l.area, 0);
+    // Pocket widens (never narrows) going up, so the item can be pulled out of the top.
+    for (let i = 1; i < r.baseCount; i++) expect(cav(i)).toBeGreaterThanOrEqual(cav(i - 1) - 1);
+    // Top pocket layer is at least as wide as every layer below it.
+    const top = cav(r.baseCount - 1);
+    for (let i = 0; i < r.baseCount; i++) expect(top).toBeGreaterThanOrEqual(cav(i) - 1);
+    // Lid pads above are solid.
+    for (let i = r.baseCount; i < r.layers.length; i++) expect(r.layers[i].loops).toHaveLength(1);
+    expect(r.baseCount).toBeLessThan(r.layers.length);
+    expect(r.report.topCushion).toBeGreaterThanOrEqual(IN - 0.05);
+  });
+});
+
+describe('item scale', () => {
+  it('scales in the STL frame regardless of orientation', () => {
+    const box = makeBox(10, 20, 30);
+    expect(orientItem(box, 'z', false, false, [2, 1, 0.5]).size.map(Math.round)).toEqual([
+      20, 20, 15,
+    ]);
+    // Y up: oriented (X, Z, Y) of the scaled STL (20, 20, 15) -> (20, 15, 20)
+    expect(orientItem(box, 'y', false, false, [2, 1, 0.5]).size.map(Math.round)).toEqual([
+      20, 15, 20,
+    ]);
+    // X up + turn: oriented (Z, Y, X) = (15, 20, 20), turned -> (20, 15, 20)
+    expect(orientItem(box, 'x', true, false, [2, 1, 0.5]).size.map(Math.round)).toEqual([
+      20, 15, 20,
+    ]);
+  });
+
+  it('a scaled-up item that no longer fits is rejected', () => {
+    const item = makeBox(100, 60, 50);
+    expect(() => buildInsert(item, { ...base, scale: [3, 3, 1] })).toThrow(/doesn't fit/);
+  });
+});
