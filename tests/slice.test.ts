@@ -87,3 +87,20 @@ describe('axis rotation', () => {
     expect(Array.from(x.slice(0, 3))).toEqual([0, 4, 2]);
   });
 });
+
+describe('per-axis scale', () => {
+  it('scales X, Y and Z independently after orientation', async () => {
+    const { orientedSize } = await import('../src/core/transform');
+    const { size } = transformMesh(makeBox(10, 20, 30), 'y', [2, 0.5, 1]);
+    // Y stacking: oriented size is (10, 30, 20), then scaled.
+    expect(orientedSize([10, 20, 30], 'y')).toEqual([10, 30, 20]);
+    expect(size.map((v) => Math.round(v * 1e4) / 1e4)).toEqual([20, 15, 20]);
+    const { layers } = sliceModel(
+      transformMesh(makeBox(10, 20, 30), 'x', [1, 2, 3]).mesh,
+      30,
+      10,
+      0.01,
+    );
+    expect(layers[0].loops[0].area).toBeGreaterThan(0);
+  });
+});

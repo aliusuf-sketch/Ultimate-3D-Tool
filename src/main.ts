@@ -9,7 +9,9 @@ import { SettingsForm } from './ui/settings';
 import { toast } from './ui/toast';
 import { initTheme } from './ui/theme';
 import { debounce, download, mm } from './ui/format';
-import type { StackAxis } from './types';
+import type { ExtrasSettings, StackAxis } from './types';
+import { orientedSize } from './core/transform';
+import { estimateCost, formatMoney, MM_PER_FT } from './core/cost';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -34,6 +36,11 @@ const ui = {
   exportBtn: $<HTMLButtonElement>('exportBtn'),
   layerSvgBtn: $<HTMLButtonElement>('layerSvgBtn'),
   themeBtn: $<HTMLButtonElement>('themeBtn'),
+  scaleHint: $('scaleHint'),
+  resetSizeBtn: $<HTMLButtonElement>('resetSizeBtn'),
+  costCard: $('costCard'),
+  costTotal: $('costTotal'),
+  costDetail: $('costDetail'),
 };
 
 const form = new SettingsForm($<HTMLFormElement>('settings'));
@@ -52,6 +59,8 @@ let exportJob = 0;
 let svgJob = 0;
 let lastSliceKey = '';
 let lastExtrasKey = '';
+let sentExtras: ExtrasSettings | null = null;
+let costExtras: ExtrasSettings | null = null;
 let reframeNext = true;
 let gotSlice = -1;
 let gotExtras = -1;
@@ -82,27 +91,48 @@ function syncButtons(): void {
   ui.exportBtn.textContent = exporting ? 'Building ZIP…' : 'Download ZIP';
 }
 
-// ---- Model height <-> scale ----
-function baseHeight(axis: StackAxis): number {
-  if (!model) return 0;
-  return model.size[axis === 'z' ? 2 : axis === 'y' ? 1 : 0];
+// ---- Model size (X / Y / Z in mm, oriented frame) ----
+let baseAxis: StackAxis = 'z';
+
+function baseSize(axis: StackAxis = form.axis()): [number, number, number] {
+  return model ? orientedSize(model.size, axis) : [0, 0, 0];
 }
 
-function syncHeightField(): void {
-  const h = baseHeight(form.axis());
-  if (h > 0) form.set('stackHeight', (h * form.num('scale', 100)) / 100);
+function factors(): [number, number, number] {
+  const b = baseSize(baseAxis);
+  const s = form.size(b);
+  return [0, 1, 2].map((i) => (b[i] > 0 ? s[i] / b[i] : 1)) as [number, number, number];
+}
+
+function setSize(k: [number, number, number]): void {
+  const b = baseSize();
+  (['sizeX', 'sizeY', 'sizeZ'] as const).forEach((n, i) => form.set(n, b[i] * k[i]));
+  updateScaleHint();
+}
+
+function updateScaleHint(): void {
+  const f = factors().map((v) => Math.round(v * 1000) / 10);
+  ui.scaleHint.textContent =
+    f[0] === f[1] && f[1] === f[2]
+      ? `Scale ${f[0]} %`
+      : `Scale X ${f[0]} % · Y ${f[1]} % · Z ${f[2]} %`;
 }
 
 // ---- Compute requests ----
 function compute(): void {
   if (!model) return;
-  const slice = form.slice();
+  const slice = form.slice(baseSize());
   const extras = form.extras();
   const sKey = JSON.stringify(slice);
   const eKey = JSON.stringify(extras);
   if (sKey !== lastSliceKey) {
     const prev = lastSliceKey ? JSON.parse(lastSliceKey) : null;
-    if (!prev || prev.axis !== slice.axis || prev.scale !== slice.scale) reframeNext = true;
+    if (
+      !prev ||
+      prev.axis !== slice.axis ||
+      JSON.stringify(prev.scale) !== JSON.stringify(slice.scale)
+    )
+      reframeNext = true;
     sliceJob++;
     extrasJob++;
   } else if (eKey !== lastExtrasKey) {
@@ -112,6 +142,7 @@ function compute(): void {
   }
   lastSliceKey = sKey;
   lastExtrasKey = eKey;
+  sentExtras = extras;
   send({ type: 'compute', sliceJob, slice, extrasJob, extras });
   if (gotSlice !== sliceJob) setProgress('Slicing', 0);
   syncButtons();
@@ -139,7 +170,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       lastSliceKey = '';
       lastExtrasKey = '';
       reframeNext = true;
-      syncHeightField();
+      baseAxis = form.axis();
+      setSize([1, 1, 1]);
       compute();
       break;
     }
@@ -149,6 +181,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       layers = m.layers;
       sliceSummary = m.summary;
       extrasSummary = null;
+      renderCost();
       stackView.setPreview(m.preview, m.summary.size, reframeNext);
       reframeNext = false;
       layerView.setData(m.layers, [m.summary.size[0], m.summary.size[1]]);
@@ -166,6 +199,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       if (m.sliceJob !== sliceJob || m.extrasJob !== extrasJob) return;
       gotExtras = m.extrasJob;
       extrasSummary = m.summary;
+      costExtras = sentExtras;
+      renderCost();
       layerView.setExtras(m.extras);
       setProgress(null);
       renderStats();
@@ -250,17 +285,57 @@ ui.slider.addEventListener('input', () => selectLayer(+ui.slider.value));
 // ---- Settings ----
 form.form.addEventListener('input', (ev) => {
   const name = (ev.target as HTMLInputElement).name;
-  if (name === 'stackHeight') {
-    const base = baseHeight(form.axis());
-    const h = form.num('stackHeight', 0, 0.001);
-    if (base > 0 && h > 0) form.set('scale', (h / base) * 100);
-  } else if (name === 'scale' || name === 'axis') {
-    syncHeightField();
+  if (name === 'sizeX' || name === 'sizeY' || name === 'sizeZ') {
+    const i = name === 'sizeX' ? 0 : name === 'sizeY' ? 1 : 2;
+    const k = factors()[i];
+    if (form.checked('lockRatio') && k > 0) {
+      const b = baseSize();
+      (['sizeX', 'sizeY', 'sizeZ'] as const).forEach((n, j) => {
+        if (j !== i) form.set(n, b[j] * k);
+      });
+    }
+    updateScaleHint();
+  } else if (name === 'axis') {
+    // Keep a uniform scale across orientations; reset non-uniform scaling.
+    const f = factors();
+    const k = f[0] === f[1] && f[1] === f[2] ? f[0] : 1;
+    baseAxis = form.axis();
+    setSize([k, k, k]);
+  } else if (name === 'lockRatio' && form.checked('lockRatio')) {
+    const k = factors()[2];
+    setSize([k, k, k]);
   }
+  if (name === 'sheetPrice' || name === 'currency') return renderCost();
   if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
   computeSoon();
 });
 form.form.addEventListener('submit', (e) => e.preventDefault());
+ui.resetSizeBtn.addEventListener('click', () => {
+  if (!model) return;
+  setSize([1, 1, 1]);
+  computeSoon();
+});
+
+// ---- Material cost (updates live, no worker round-trip) ----
+function renderCost(): void {
+  const e = extrasSummary;
+  const x = costExtras;
+  if (!e || !x || !layers || layers.n === 0) {
+    ui.costCard.hidden = true;
+    return;
+  }
+  const price = form.num('sheetPrice', 0, 0);
+  const currency = form.text('currency', '$');
+  const c = estimateCost(e.sheets, x.sheetW, x.sheetH, e.partArea, price);
+  const ft = (v: number) => mm(v / MM_PER_FT, 2);
+  ui.costCard.hidden = false;
+  ui.costTotal.textContent = price > 0 ? formatMoney(c.total, currency) : 'Set a sheet price';
+  ui.costDetail.textContent =
+    `${c.sheets} sheet${c.sheets === 1 ? '' : 's'} of ${ft(x.sheetW)} × ${ft(x.sheetH)} ft` +
+    (price > 0 ? ` × ${formatMoney(price, currency)}` : '') +
+    ` · ${Math.round(c.utilisation * 100)} % material used` +
+    (c.oversizeSheets ? ` · incl. ${c.sheets - c.regularSheets} for oversize parts` : '');
+}
 
 // ---- Views ----
 function showView(which: '3d' | '2d'): void {

@@ -15,7 +15,8 @@ export function computeBBox(positions: ArrayLike<number>): BBox3 {
 }
 
 /**
- * Rotate so the chosen axis becomes the stacking (Z) axis, scale, then translate the
+ * Rotate so the chosen axis becomes the stacking (Z) axis, scale per axis (positive
+ * factors, so orientation is preserved), then translate the
  * bounding-box minimum to the origin. Rotations are proper (det = +1), never mirrors:
  *   Y: (x, y, z) -> (x, -z, y)
  *   X: (x, y, z) -> (-z, y, x)
@@ -23,8 +24,9 @@ export function computeBBox(positions: ArrayLike<number>): BBox3 {
 export function transformMesh(
   mesh: Mesh,
   axis: StackAxis,
-  scale: number,
+  scale: number | [number, number, number],
 ): { mesh: Mesh; size: [number, number, number] } {
+  const [sx, sy, sz] = typeof scale === 'number' ? [scale, scale, scale] : scale;
   const src = mesh.positions;
   const out = new Float32Array(src.length);
   for (let i = 0; i < src.length; i += 3) {
@@ -43,9 +45,9 @@ export function transformMesh(
       b = y;
       c = x;
     }
-    out[i] = a * scale;
-    out[i + 1] = b * scale;
-    out[i + 2] = c * scale;
+    out[i] = a * sx;
+    out[i + 1] = b * sy;
+    out[i + 2] = c * sz;
   }
   const bb = computeBBox(out);
   for (let i = 0; i < out.length; i += 3) {
@@ -65,4 +67,15 @@ export function transformMesh(
 export function stackExtent(bb: BBox3, axis: StackAxis): number {
   const k = axis === 'z' ? 2 : axis === 'y' ? 1 : 0;
   return bb.max[k] - bb.min[k];
+}
+
+/** Source bbox extents re-ordered to the oriented frame (X, Y, Z = stack axis). */
+export function orientedSize(
+  src: [number, number, number],
+  axis: StackAxis,
+): [number, number, number] {
+  const [x, y, z] = src;
+  if (axis === 'y') return [x, z, y];
+  if (axis === 'x') return [z, y, x];
+  return [x, y, z];
 }

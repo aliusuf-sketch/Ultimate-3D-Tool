@@ -82,6 +82,10 @@
               <div class="progress-label" id="progressLabel">Working…</div>
               <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
             </div>
+            <div class="cost-card" id="costCard" hidden aria-live="polite">
+              <div class="cost-total" id="costTotal">—</div>
+              <div class="cost-detail" id="costDetail"></div>
+            </div>
             <div class="legend" id="legend2d" hidden>
               <span><i class="sw sw-cut"></i>Cut</span>
               <span><i class="sw sw-below"></i>Layer below</span>
@@ -118,22 +122,32 @@
                   <label><input type="radio" name="axis" value="x" /><span>X</span></label>
                 </div>
               </div>
-              <div class="row">
-                <label class="field"
-                  ><span class="label">Scale %</span>
-                  <input
-                    type="number"
-                    name="scale"
-                    value="100"
-                    min="0.1"
-                    step="any"
-                    inputmode="decimal"
-                /></label>
-                <label class="field"
-                  ><span class="label">Stack height (mm)</span>
-                  <input type="number" name="stackHeight" min="0.1" step="any" inputmode="decimal"
-                /></label>
+              <div class="field">
+                <span class="label" id="sizeLabel"
+                  >Size (mm, after orientation · Z = stack height)</span
+                >
+                <div class="row row-3" role="group" aria-labelledby="sizeLabel">
+                  <label class="field"
+                    ><span class="label">X (mm)</span>
+                    <input type="number" name="sizeX" min="0.1" step="any" inputmode="decimal"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Y (mm)</span>
+                    <input type="number" name="sizeY" min="0.1" step="any" inputmode="decimal"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Z (mm)</span>
+                    <input type="number" name="sizeZ" min="0.1" step="any" inputmode="decimal"
+                  /></label>
+                </div>
               </div>
+              <div class="size-tools">
+                <label class="check"
+                  ><input type="checkbox" name="lockRatio" checked /> Lock proportions</label
+                >
+                <button class="btn btn-small" type="button" id="resetSizeBtn">Original size</button>
+              </div>
+              <p class="hint" id="scaleHint">Scale 100 %</p>
             </fieldset>
 
             <fieldset>
@@ -225,31 +239,47 @@
             </fieldset>
 
             <fieldset>
-              <legend>Sheet nesting</legend>
+              <legend>Sheet nesting &amp; cost</legend>
               <div class="row row-3">
                 <label class="field"
-                  ><span class="label">Width (mm)</span>
+                  ><span class="label">Width (ft)</span>
                   <input
                     type="number"
-                    name="sheetW"
-                    value="1200"
-                    min="10"
+                    name="sheetWft"
+                    value="4"
+                    min="0.1"
                     step="any"
                     inputmode="decimal"
                 /></label>
                 <label class="field"
-                  ><span class="label">Height (mm)</span>
+                  ><span class="label">Height (ft)</span>
                   <input
                     type="number"
-                    name="sheetH"
-                    value="600"
-                    min="10"
+                    name="sheetHft"
+                    value="2"
+                    min="0.1"
                     step="any"
                     inputmode="decimal"
                 /></label>
                 <label class="field"
                   ><span class="label">Gap (mm)</span>
                   <input type="number" name="gap" value="6" min="0" step="any" inputmode="decimal"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Price per sheet</span>
+                  <input
+                    type="number"
+                    name="sheetPrice"
+                    value="25"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Currency</span>
+                  <input type="text" name="currency" value="$" maxlength="4" class="text-input"
                 /></label>
               </div>
             </fieldset>

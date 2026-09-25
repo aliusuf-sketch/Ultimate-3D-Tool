@@ -1,6 +1,6 @@
 import type { PackedExtras, PackedLayers } from '../core/pack';
 import type { PreviewGeometry } from '../core/preview';
-import type { ExportOptions, ExtrasSettings, SliceSettings } from '../types';
+import type { SheetInfo, ExportOptions, ExtrasSettings, SliceSettings } from '../types';
 
 export type ToWorker =
   | { type: 'load'; job: number; buffer: ArrayBuffer; name: string }
@@ -25,6 +25,8 @@ export interface SliceSummary {
 export interface ExtrasSummary {
   pinsMissingLayers: number;
   sheetCount: number;
+  sheets: SheetInfo[];
+  partArea: number; // mm², net of holes
   oversizeCount: number;
   partCount: number;
 }

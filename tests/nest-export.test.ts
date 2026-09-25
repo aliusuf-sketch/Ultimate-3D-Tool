@@ -157,3 +157,21 @@ describe('writers', () => {
     expect(s).toContain('<circle cx="20" cy="25" r="3"/>');
   });
 });
+
+describe('cost estimate', () => {
+  it('counts sheets, oversize area-equivalents, cost and utilisation', async () => {
+    const { estimateCost, MM_PER_FT } = await import('../src/core/cost');
+    const W = 4 * MM_PER_FT,
+      H = 2 * MM_PER_FT;
+    const sheets = [
+      { index: 0, oversize: false, w: W, h: H },
+      { index: 1, oversize: false, w: W, h: H },
+      { index: 2, oversize: true, w: W * 1.5, h: H },
+    ];
+    const c = estimateCost(sheets, W, H, W * H, 25);
+    expect(c.sheets).toBe(4);
+    expect(c.total).toBe(100);
+    expect(c.utilisation).toBeCloseTo(0.25);
+    expect(estimateCost(sheets, W, H, 0, -1).total).toBe(0);
+  });
+});

@@ -8,6 +8,8 @@ import {
 } from '../core/export/zip';
 import { drawingToSVG } from '../core/export/svg';
 import { computeExtras } from '../core/extras';
+import { partsArea } from '../core/cost';
+import { signedArea } from '../core/topology';
 import { buildParts, nestParts } from '../core/nest';
 import { extrasTransferables, packedTransferables, packExtras, packLayers } from '../core/pack';
 import { sliceModelIter } from '../core/pipeline';
@@ -151,6 +153,8 @@ async function doExtras(): Promise<void> {
       summary: {
         pinsMissingLayers,
         sheetCount: nest.sheets.length,
+        sheets: nest.sheets,
+        partArea: partsArea(parts, signedArea),
         oversizeCount: nest.oversizeCount,
         partCount: parts.length,
       },
@@ -242,7 +246,10 @@ ctx.onmessage = async (ev: MessageEvent<ToWorker>) => {
         void pump();
         break;
       case 'export': {
-        const files = buildExportFiles(exportInput(), m.opts);
+        const files = buildExportFiles(
+          { ...exportInput(), sheetW: want.extras!.sheetW, sheetH: want.extras!.sheetH },
+          m.opts,
+        );
         const zip = await buildZip(files);
         post({ type: 'exported', job: m.job, zip, fileCount: files.length }, [zip.buffer]);
         break;

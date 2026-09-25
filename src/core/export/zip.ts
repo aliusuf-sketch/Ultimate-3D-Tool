@@ -8,7 +8,9 @@ import type {
   Part,
   SlicedLayer,
 } from '../../types';
+import { formatMoney, estimateCost, MM_PER_FT, partsArea } from '../cost';
 import { layerName } from '../extras';
+import { signedArea } from '../topology';
 import { placeTransform } from '../nest';
 import { drawingToDXF } from './dxf';
 import { drawingToSVG } from './svg';
@@ -23,6 +25,8 @@ export interface ExportInput {
   extras: LayerExtras[];
   parts: Part[];
   nest: NestResult;
+  sheetW?: number; // mm
+  sheetH?: number; // mm
 }
 
 const fmt = (n: number) => String(Math.round(n * 100) / 100);
@@ -86,8 +90,33 @@ export function sheetFileBase(input: ExportInput, sheet: number): string {
   return input.nest.sheets[sheet].oversize ? `${s}_oversize` : s;
 }
 
-export function readmeText(input: ExportInput): string {
+export function readmeText(
+  input: ExportInput,
+  opts?: Pick<ExportOptions, 'pricePerSheet' | 'currency'>,
+): string {
   const [w, d, h] = input.size;
+  const costLines: string[] = [];
+  if (input.sheetW && input.sheetH) {
+    const ft = (v: number) => fmt(v / MM_PER_FT);
+    costLines.push(
+      `Stock sheet:      ${ft(input.sheetW)} x ${ft(input.sheetH)} ft (${fmt(input.sheetW)} x ${fmt(input.sheetH)} mm)`,
+    );
+    if (opts) {
+      const c = estimateCost(
+        input.nest.sheets,
+        input.sheetW,
+        input.sheetH,
+        partsArea(input.parts, signedArea),
+        opts.pricePerSheet,
+      );
+      costLines.push(`Sheets to buy:    ${c.sheets}`);
+      if (opts.pricePerSheet > 0)
+        costLines.push(
+          `Material cost:    ${formatMoney(c.total, opts.currency)} (${formatMoney(opts.pricePerSheet, opts.currency)} per sheet)`,
+        );
+      costLines.push(`Material used:    ${Math.round(c.utilisation * 100)} %`);
+    }
+  }
   return [
     'Foam Slicer export',
     '==================',
@@ -97,6 +126,7 @@ export function readmeText(input: ExportInput): string {
     `Layers:           ${input.layers.length}`,
     `Model size:       ${fmt(w)} x ${fmt(d)} x ${fmt(h)} mm (W x D x H)`,
     `Sheets (nested):  ${input.nest.sheets.length}${input.nest.oversizeCount ? ` (${input.nest.oversizeCount} oversize)` : ''}`,
+    ...costLines,
     '',
     'Colour / layer legend',
     '  Red   #FF0000  / DXF layer CUT      - cut through (outlines, holes, pin holes)',
@@ -133,7 +163,7 @@ export function buildExportFiles(
       if (opts.svg) files.push({ path: `${base}.svg`, data: drawingToSVG(d) });
     });
   }
-  files.push({ path: 'README.txt', data: readmeText(input) });
+  files.push({ path: 'README.txt', data: readmeText(input, opts) });
   return files;
 }
 

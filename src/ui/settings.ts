@@ -1,4 +1,5 @@
 /** Reads the settings form into typed settings objects. */
+import { MM_PER_FT } from '../core/cost';
 import type { ExportOptions, ExtrasSettings, PinMode, SliceSettings, StackAxis } from '../types';
 
 export class SettingsForm {
@@ -17,6 +18,10 @@ export class SettingsForm {
     this.el(name).value = String(Math.round(value * 1000) / 1000);
   }
 
+  text(name: string, fallback: string): string {
+    return this.el(name).value.trim() || fallback;
+  }
+
   checked(name: string): boolean {
     return this.el(name).checked;
   }
@@ -26,10 +31,22 @@ export class SettingsForm {
     return (r?.value as StackAxis) ?? 'z';
   }
 
-  slice(): SliceSettings {
+  /** Target model size (mm) in the oriented frame; falls back to `base` per axis. */
+  size(base: [number, number, number]): [number, number, number] {
+    return [
+      this.num('sizeX', base[0], 1e-3),
+      this.num('sizeY', base[1], 1e-3),
+      this.num('sizeZ', base[2], 1e-3),
+    ];
+  }
+
+  /** `base` = oriented model size at 100 %. */
+  slice(base: [number, number, number]): SliceSettings {
+    const size = this.size(base);
+    const f = (i: number) => (base[i] > 0 ? size[i] / base[i] : 1);
     return {
       axis: this.axis(),
-      scale: this.num('scale', 100, 0.001) / 100,
+      scale: [f(0), f(1), f(2)],
       thickness: this.num('thickness', 10, 0.1),
       tolerance: this.num('tolerance', 0.05, 0),
     };
@@ -44,8 +61,8 @@ export class SettingsForm {
       pinOffsetY: this.num('pinOffsetY', 0),
       labels: this.checked('labels'),
       labelHeight: this.num('labelHeight', 6, 0.5),
-      sheetW: this.num('sheetW', 1200, 1),
-      sheetH: this.num('sheetH', 600, 1),
+      sheetW: this.num('sheetWft', 4, 0.01) * MM_PER_FT,
+      sheetH: this.num('sheetHft', 2, 0.01) * MM_PER_FT,
       gap: this.num('gap', 6, 0),
     };
   }
@@ -56,6 +73,8 @@ export class SettingsForm {
       svg: this.checked('fmtSvg'),
       perLayer: this.checked('outLayers'),
       sheets: this.checked('outSheets'),
+      pricePerSheet: this.num('sheetPrice', 0, 0),
+      currency: this.text('currency', '$'),
     };
   }
 }

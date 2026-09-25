@@ -35,7 +35,7 @@ export interface SlicedLayer {
 
 export interface SliceSettings {
   axis: StackAxis;
-  scale: number; // 1 = 100 %
+  scale: [number, number, number]; // per-axis factors applied after orientation (1 = 100 %)
   thickness: number; // mm
   tolerance: number; // Douglas–Peucker tolerance, mm
 }
@@ -118,4 +118,6 @@ export interface ExportOptions {
   svg: boolean;
   perLayer: boolean;
   sheets: boolean;
+  pricePerSheet: number;
+  currency: string;
 }
