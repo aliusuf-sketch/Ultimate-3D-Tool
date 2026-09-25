@@ -22,6 +22,8 @@ export interface InsertExportInput {
   groups: ThicknessGroup[];
   sheetW: number;
   sheetH: number;
+  /** Layers the user removed: not cut, not nested, listed as removed. */
+  removed?: Set<number>;
 }
 
 export interface InsertExportOptions extends ExportOptions {
@@ -37,6 +39,12 @@ export function thicknessLabel(mm: number): string {
   return `${Math.round(mm * 10) / 10}mm`;
 }
 
+/** Role of layer i as named in files (pocket / lidpad for top-loading inserts). */
+export function layerRole(r: InsertResult, i: number): string {
+  if (r.topLoad) return r.roles[i] === 'base' ? 'pocket' : 'lidpad';
+  return roleName(r.roles[i]);
+}
+
 export function roleName(role: LayerRole): string {
   return role === 'base' ? 'base' : role === 'lid' ? 'lid' : 'layer';
 }
@@ -46,7 +54,7 @@ export function insertLabelText(role: LayerRole, index: number): string {
 }
 
 export function insertLayerFileBase(r: InsertResult, i: number): string {
-  return `${layerName(i)}_${roleName(r.roles[i])}_${thicknessLabel(r.thickness[i])}`;
+  return `${layerName(i)}_${layerRole(r, i)}_${thicknessLabel(r.thickness[i])}`;
 }
 
 function asExportInput(x: InsertExportInput, group?: ThicknessGroup): ExportInput {
@@ -92,8 +100,12 @@ function readme(x: InsertExportInput, opts: InsertExportOptions): string {
     '----------------------',
   ];
   r.layers.forEach((l, i) => {
+    if (x.removed?.has(i)) {
+      lines.push(`${layerName(i)}  REMOVED (not cut) — ${thicknessLabel(r.thickness[i])}`);
+      return;
+    }
     lines.push(
-      `${layerName(i)}  ${roleName(r.roles[i]).padEnd(5)}  ${thicknessLabel(r.thickness[i]).padEnd(7)}  z ${f(l.z0)}-${f(l.z1)} mm  ${l.loops.length > 1 ? `${l.loops.length - 1} cut-out(s)` : 'solid'}`,
+      `${layerName(i)}  ${layerRole(r, i).padEnd(6)}  ${thicknessLabel(r.thickness[i]).padEnd(7)}  z ${f(l.z0)}-${f(l.z1)} mm  ${l.loops.length > 1 ? `${l.loops.length - 1} cut-out(s)` : 'solid'}`,
     );
   });
   lines.push('', 'Foam to buy', '-----------');
@@ -148,11 +160,12 @@ function cutList(x: InsertExportInput): string {
   const r = x.result;
   const rows = ['layer,role,thickness_mm,thickness,z0_mm,z1_mm,cutouts,foam_area_mm2'];
   r.layers.forEach((l, i) => {
+    if (x.removed?.has(i)) return;
     const area = l.loops.reduce((a, q) => a + q.area, 0);
     rows.push(
       [
         layerName(i),
-        roleName(r.roles[i]),
+        layerRole(r, i),
         r.thickness[i].toFixed(2),
         thicknessLabel(r.thickness[i]),
         l.z0.toFixed(2),
@@ -173,6 +186,7 @@ export function buildInsertFiles(
   const all = asExportInput(x);
   if (opts.perLayer) {
     x.result.layers.forEach((_, i) => {
+      if (x.removed?.has(i)) return;
       const d = layerDrawing(all, i);
       const base = `layers/${insertLayerFileBase(x.result, i)}`;
       if (opts.dxf) files.push({ path: `${base}.dxf`, data: drawingToDXF(d) });

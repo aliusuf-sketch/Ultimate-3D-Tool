@@ -210,3 +210,34 @@ describe('item scale', () => {
     expect(() => buildInsert(item, { ...base, scale: [3, 3, 1] })).toThrow(/doesn't fit/);
   });
 });
+
+describe('insert export', () => {
+  it('skips removed layers and names top-loading roles', async () => {
+    const { buildInsertFiles } = await import('../src/core/export/insertZip');
+    const r = buildInsert(makeBox(100, 60, 2 * IN), { ...base, mode: 'topLoad' });
+    const data = {
+      sourceName: 'box.stl',
+      result: r,
+      extras: r.layers.map(() => ({ pins: [], label: null, missingPins: 0 })),
+      groups: [],
+      sheetW: 1219.2,
+      sheetH: 609.6,
+      removed: new Set([r.layers.length - 1]),
+    };
+    const files = buildInsertFiles(data, {
+      dxf: true,
+      svg: false,
+      perLayer: true,
+      sheets: false,
+      pricePerSheet: 0,
+      currency: '$',
+      prices: [],
+      boxLabel: '8 x 8 x 6 in',
+    });
+    const layerFiles = files.filter((f) => f.path.startsWith('layers/'));
+    expect(layerFiles).toHaveLength(r.layers.length - 1);
+    expect(layerFiles[0].path).toMatch(/^layers\/L01_pocket_/);
+    const readme = files.find((f) => f.path === 'README.txt')!.data;
+    expect(readme).toContain('REMOVED (not cut)');
+  });
+});

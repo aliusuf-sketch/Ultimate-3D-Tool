@@ -186,6 +186,37 @@ async function doExtras(): Promise<void> {
   );
 }
 
+/** Nest each foam thickness separately, skipping removed layers. */
+function nestGroups(
+  result: InsertResult,
+  extras: LayerExtras[],
+  ex: InsertExtrasSettings,
+  removed: Set<number>,
+): ThicknessGroup[] {
+  const groups: ThicknessGroup[] = [];
+  const kept = result.thickness.flatMap((v, i) => (removed.has(i) ? [] : [v]));
+  for (const t of [...new Set(kept.map((v) => Math.round(v * 100) / 100))].sort((a, b) => a - b)) {
+    const idx = result.thickness.flatMap((v, i) =>
+      Math.abs(v - t) < 0.01 && !removed.has(i) ? [i] : [],
+    );
+    const parts = buildParts(
+      idx.map((i) => result.layers[i]),
+      extras,
+    );
+    const nest = nestParts(parts, ex.sheetW, ex.sheetH, ex.gap);
+    groups.push({ thickness: t, layers: idx, parts, nest, partArea: partsArea(parts, signedArea) });
+  }
+  return groups;
+}
+
+const groupSummary = (groups: ThicknessGroup[]) =>
+  groups.map((g) => ({
+    thickness: g.thickness,
+    layerCount: g.layers.length,
+    sheets: g.nest.sheets,
+    partArea: g.partArea,
+  }));
+
 async function doInsert(): Promise<void> {
   const job = insertWant.job;
   const settings = insertWant.settings!;
@@ -223,19 +254,7 @@ async function doInsert(): Promise<void> {
     },
     (i) => insertLabelText(result.roles[i], i),
   );
-  // Nest each foam thickness separately.
-  const groups: ThicknessGroup[] = [];
-  for (const t of [...new Set(result.thickness.map((v) => Math.round(v * 100) / 100))].sort(
-    (a, b) => a - b,
-  )) {
-    const idx = result.thickness.flatMap((v, i) => (Math.abs(v - t) < 0.01 ? [i] : []));
-    const parts = buildParts(
-      idx.map((i) => result.layers[i]),
-      extras,
-    );
-    const nest = nestParts(parts, ex.sheetW, ex.sheetH, ex.gap);
-    groups.push({ thickness: t, layers: idx, parts, nest, partArea: partsArea(parts, signedArea) });
-  }
+  const groups = nestGroups(result, extras, ex, new Set());
   const data: InsertExportInput = {
     sourceName: src.name,
     result,
@@ -266,12 +285,7 @@ async function doInsert(): Promise<void> {
         itemSize: result.itemSize,
         itemOffset: result.itemOffset,
         report: result.report,
-        groups: groups.map((g) => ({
-          thickness: g.thickness,
-          layerCount: g.layers.length,
-          sheets: g.nest.sheets,
-          partArea: g.partArea,
-        })),
+        groups: groupSummary(groups),
         sheetW: ex.sheetW,
         sheetH: ex.sheetH,
         ms: performance.now() - t0,
@@ -395,6 +409,15 @@ ctx.onmessage = async (ev: MessageEvent<ToWorker>) => {
         insertWant.extras = m.extras;
         void pump();
         break;
+      case 'insertRemoved': {
+        const d = insertDone;
+        if (!d?.data || d.job !== m.job) break;
+        const removed = new Set(m.removed);
+        d.data.removed = removed;
+        d.data.groups = nestGroups(d.data.result, d.data.extras, insertWant.extras!, removed);
+        post({ type: 'insertGroups', job: m.job, groups: groupSummary(d.data.groups) });
+        break;
+      }
       case 'exportInsert': {
         const data = insertDone?.data;
         if (!data) throw new Error('Nothing to export yet');

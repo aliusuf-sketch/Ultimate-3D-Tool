@@ -366,16 +366,27 @@ export function bestOrientation(
 }
 
 /** Smallest preset box (by volume) giving at least `cushion` on every side. */
-export function smallestBox(src: [number, number, number], cushion: number, clearance: number) {
-  const IN = 25.4;
+export const STANDARD_BOXES_MM: [number, number, number][] = BOX_PRESETS_IN.map(
+  (b) => b.map((v) => v * 25.4) as [number, number, number],
+);
+
+/**
+ * Smallest box (by volume) giving at least `cushion` on every side. `boxes` are inside
+ * dimensions in mm (defaults to the standard list).
+ */
+export function smallestBox(
+  src: [number, number, number],
+  cushion: number,
+  clearance: number,
+  boxes: [number, number, number][] = STANDARD_BOXES_MM,
+) {
   let best: {
     box: [number, number, number];
     axis: StackAxis;
     turn90: boolean;
     volume: number;
   } | null = null;
-  for (const b of BOX_PRESETS_IN) {
-    const box = b.map((v) => v * IN) as [number, number, number];
+  for (const box of boxes) {
     for (const o of ORIENTATIONS) {
       // Boxes can be used on any side; the preset lists L >= W, H is free.
       if (fitMargin(orientedDims(src, o.axis, o.turn90), box, clearance) >= cushion) {

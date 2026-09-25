@@ -791,3 +791,117 @@ body.mode-ship [data-mode='slicer'] {
 .report-warn:empty {
   display: none;
 }
+
+/* ---- Box ---- */
+.save-box {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.save-box input {
+  min-width: 0;
+}
+
+/* ---- Layer list ---- */
+.layer-tools {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.layer-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column-reverse; /* top layer first, like the stack */
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.layer-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.layer-row.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.layer-row.hidden-layer .layer-name {
+  opacity: 0.55;
+}
+.layer-row.removed .layer-name {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+.layer-name {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: 500 13px var(--font);
+  padding: 6px 4px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  border-radius: 4px;
+}
+.layer-name b {
+  font-weight: 700;
+}
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text);
+}
+.icon-btn[aria-pressed='true'] {
+  color: var(--accent-strong);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+fieldset:disabled {
+  opacity: 0.55;
+}
+.locked-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* ---- Animation caption ---- */
+.anim-caption {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  background: rgba(10, 20, 15, 0.8);
+  color: #fff;
+  font: 600 18px/1.2 var(--font-cond);
+  white-space: nowrap;
+  pointer-events: none;
+}

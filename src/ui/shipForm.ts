@@ -1,5 +1,6 @@
 /** Shipping-insert settings: reading the form, unit handling and box presets. */
-import { BOX_PRESETS_IN, type InsertSettings } from '../core/insert';
+import { BOX_PRESETS_IN, STANDARD_BOXES_MM, type InsertSettings } from '../core/insert';
+import { loadBoxes, type SavedBox } from './boxStore';
 import type { StackAxis } from '../types';
 import type { SettingsForm } from './settings';
 
@@ -14,6 +15,7 @@ const UNIT_FIELDS = [
   'boxL',
   'boxW',
   'boxH',
+  'boxWall',
   'minCushion',
   'foamT0',
   'foamT1',
@@ -26,6 +28,7 @@ export const FOAM_ROWS = 4;
 export const SHIP_FIELDS = new Set([
   ...UNIT_FIELDS,
   'stlUnits',
+  'boxMeasure',
   'itemScale',
   'itemLock',
   'shipAxis',
@@ -102,15 +105,55 @@ export class ShipForm {
     this.fillPresets();
   }
 
-  box(): [number, number, number] {
+  /** Entered box sizes (inside or outside, as the user measured them), mm. */
+  private enteredBox(): [number, number, number] {
     return [this.len('boxL', 8 * IN), this.len('boxW', 8 * IN), this.len('boxH', 8 * IN)];
   }
 
-  setBox(b: [number, number, number]): void {
-    this.setLen('boxL', b[0]);
-    this.setLen('boxW', b[1]);
-    this.setLen('boxH', b[2]);
+  private wall(): number {
+    return this.select('boxMeasure') === 'outside' ? this.len('boxWall', 3.175) : 0;
+  }
+
+  /** Inside box dimensions in mm (outside sizes minus a wall on each side). */
+  box(): [number, number, number] {
+    const w = this.wall();
+    return this.enteredBox().map((v) => Math.max(1, v - 2 * w)) as [number, number, number];
+  }
+
+  /** Set the box from inside dimensions (converted if the user measures outside). */
+  setBox(inside: [number, number, number]): void {
+    const w = this.wall();
+    this.setLen('boxL', inside[0] + 2 * w);
+    this.setLen('boxW', inside[1] + 2 * w);
+    this.setLen('boxH', inside[2] + 2 * w);
     this.syncPreset();
+  }
+
+  /** Hint text showing the inside size when measuring outside ('' otherwise). */
+  insideHint(): string {
+    if (!this.wall()) return '';
+    return `Inside: ${this.box()
+      .map((v) => this.fmtLen(v).split(' ')[0])
+      .join(' × ')} ${this.currentUnits}`;
+  }
+
+  /** Boxes the smallest-box search may pick from (inside mm). */
+  searchBoxes(): [number, number, number][] {
+    const mode = this.select('boxSearch');
+    const mine = loadBoxes().map((b) => b.box);
+    if (mode === 'mine') return mine;
+    if (mode === 'standard') return STANDARD_BOXES_MM;
+    return [...mine, ...STANDARD_BOXES_MM];
+  }
+
+  selectedSavedBox(): SavedBox | null {
+    const v = this.select('boxPreset');
+    if (!v.startsWith('c:')) return null;
+    return loadBoxes().find((b) => b.id === v.slice(2)) ?? null;
+  }
+
+  boxName(): string {
+    return (this.f.form.elements.namedItem('boxName') as HTMLInputElement).value.trim();
   }
 
   foam(): { thickness: number; price: number; on: boolean }[] {
@@ -239,37 +282,76 @@ export class ShipForm {
     return `${Math.round(v * f) / f} ${this.currentUnits}`;
   }
 
-  // ---- Box presets ----
+  // ---- Box presets (saved + standard) ----
   fillPresets(): void {
     const sel = this.f.form.elements.namedItem('boxPreset') as HTMLSelectElement;
     const keep = sel.value;
-    sel.length = 1;
+    sel.innerHTML = '';
+    const custom = document.createElement('option');
+    custom.value = '';
+    custom.textContent = 'Custom size';
+    sel.append(custom);
+    const fmt = (mm: [number, number, number]) =>
+      this.currentUnits === 'in'
+        ? `${mm.map((v) => Math.round((v / IN) * 100) / 100).join(' × ')} in`
+        : `${mm.map((v) => Math.round(v)).join(' × ')} mm`;
+    const mine = loadBoxes();
+    if (mine.length) {
+      const g = document.createElement('optgroup');
+      g.label = 'My boxes';
+      for (const b of mine) {
+        const o = document.createElement('option');
+        o.value = `c:${b.id}`;
+        o.textContent = `${b.name} — ${fmt(b.box)}`;
+        g.append(o);
+      }
+      sel.append(g);
+    }
+    const g = document.createElement('optgroup');
+    g.label = 'Standard sizes (inside)';
     for (const b of BOX_PRESETS_IN) {
       const o = document.createElement('option');
-      o.value = b.join('x');
-      o.textContent =
-        this.currentUnits === 'in'
-          ? `${b[0]} × ${b[1]} × ${b[2]} in`
-          : `${b.map((v) => Math.round(v * IN)).join(' × ')} mm`;
-      sel.append(o);
+      o.value = `s:${b.join('x')}`;
+      o.textContent = fmt(b.map((v) => v * IN) as [number, number, number]);
+      g.append(o);
     }
+    sel.append(g);
     sel.value = keep;
+    if (sel.value !== keep) sel.value = '';
   }
 
   applyPreset(): boolean {
     const v = this.select('boxPreset');
     if (!v) return false;
-    const b = v.split('x').map((n) => +n * IN) as [number, number, number];
-    this.setLen('boxL', b[0]);
-    this.setLen('boxW', b[1]);
-    this.setLen('boxH', b[2]);
+    if (v.startsWith('c:')) {
+      const b = this.selectedSavedBox();
+      if (!b) return false;
+      this.setBox(b.box);
+      (this.f.form.elements.namedItem('boxName') as HTMLInputElement).value = b.name;
+      return true;
+    }
+    this.setBox(
+      v
+        .slice(2)
+        .split('x')
+        .map((n) => +n * IN) as [number, number, number],
+    );
     return true;
   }
 
+  /** Select the preset matching the current inside size, if any. */
   syncPreset(): void {
-    const b = this.box().map((v) => Math.round((v / IN) * 1000) / 1000);
+    const b = this.box();
+    const same = (x: [number, number, number]) => x.every((v, i) => Math.abs(v - b[i]) < 0.05);
     const sel = this.f.form.elements.namedItem('boxPreset') as HTMLSelectElement;
-    const key = b.join('x');
-    sel.value = BOX_PRESETS_IN.some((p) => p.join('x') === key) ? key : '';
+    const current = this.selectedSavedBox();
+    if (current && same(current.box)) return;
+    const mine = loadBoxes().find((x) => same(x.box));
+    if (mine) {
+      sel.value = `c:${mine.id}`;
+      return;
+    }
+    const std = BOX_PRESETS_IN.find((p) => same(p.map((v) => v * IN) as [number, number, number]));
+    sel.value = std ? `s:${std.join('x')}` : '';
   }
 }

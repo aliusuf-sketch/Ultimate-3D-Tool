@@ -17,6 +17,7 @@ export type ToWorker =
   | { type: 'insert'; job: number; settings: InsertSettings; extras: InsertExtrasSettings }
   | { type: 'export'; job: number; opts: ExportOptions }
   | { type: 'exportInsert'; job: number; opts: InsertExportOptions }
+  | { type: 'insertRemoved'; job: number; removed: number[] }
   | { type: 'layerSvg'; job: number; layer: number };
 
 export interface InsertExtrasSettings {
@@ -99,6 +100,7 @@ export type FromWorker =
       item: Float32Array;
     }
   | { type: 'insertError'; job: number; message: string }
+  | { type: 'insertGroups'; job: number; groups: InsertGroupSummary[] }
   | { type: 'exported'; job: number; zip: Uint8Array; fileCount: number }
   | { type: 'layerSvg'; job: number; name: string; svg: string }
   | { type: 'error'; job?: number; message: string };

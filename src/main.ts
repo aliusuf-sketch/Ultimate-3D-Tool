@@ -13,6 +13,8 @@ import type { ExtrasSettings, StackAxis } from './types';
 import { orientedSize } from './core/transform';
 import { estimateCost, formatMoney, MM_PER_FT } from './core/cost';
 import { ShipForm, SHIP_FIELDS, PRICE_FIELDS } from './ui/shipForm';
+import { deleteBox, saveBox } from './ui/boxStore';
+import type { AssemblyStep } from './view3d/stack';
 import { orientedDims, rankOrientations, smallestBox } from './core/insert';
 import { insertLabelText, thicknessLabel } from './core/export/insertZip';
 import type { InsertSummary } from './worker/protocol';
@@ -57,6 +59,16 @@ const ui = {
   smallestBoxBtn: $<HTMLButtonElement>('smallestBoxBtn'),
   itemResetBtn: $<HTMLButtonElement>('itemResetBtn'),
   itemScaleHint: $('itemScaleHint'),
+  wallField: $('wallField'),
+  boxInsideHint: $('boxInsideHint'),
+  saveBoxBtn: $<HTMLButtonElement>('saveBoxBtn'),
+  deleteBoxBtn: $<HTMLButtonElement>('deleteBoxBtn'),
+  layerList: $('layerList'),
+  showAllBtn: $<HTMLButtonElement>('showAllBtn'),
+  lockAllBtn: $<HTMLButtonElement>('lockAllBtn'),
+  playBtn: $<HTMLButtonElement>('playBtn'),
+  playHint: $('playHint'),
+  animCaption: $('animCaption'),
 };
 
 const form = new SettingsForm($<HTMLFormElement>('settings'));
@@ -179,6 +191,10 @@ const computeSoon = debounce(compute, 200);
 
 function computeInsert(): void {
   if (!model) return;
+  if (designLocked()) {
+    toast('Layers are locked — unlock them to change the design');
+    return;
+  }
   const settings = ship.settings();
   if (!settings.thicknesses.length) {
     showShipError('Tick at least one foam thickness');
@@ -226,6 +242,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       baseAxis = form.axis();
       setSize([1, 1, 1]);
       ship.setModelSize(m.size);
+      stopAnimation();
+      unlockAll();
       ship.setItemFactors([1, 1, 1]);
       ui.itemScaleHint.textContent = ship.scaleHint();
       if (mode === 'ship') prepareShip(true);
@@ -282,6 +300,18 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       });
       stackView.setExplode(explodeMm());
       reframeNext = false;
+      if (layerStates.length !== m.layers.n) {
+        layerStates = Array.from({ length: m.layers.n }, () => ({
+          hidden: false,
+          locked: false,
+          removed: false,
+        }));
+      } else {
+        for (const st of layerStates) st.locked = false; // a new plan is never locked
+        if (layerStates.some((st) => st.removed)) syncRemoved();
+      }
+      applyLayerVisibility();
+      renderLayerList();
       layerView.setLabelText((i) => insertLabelText(S.roles[i] ?? 'layer', i));
       layerView.setData(m.layers, S.rect);
       layerView.setExtras(m.extras);
@@ -295,6 +325,13 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       renderStats();
       renderCost();
       syncButtons();
+      break;
+    }
+    case 'insertGroups': {
+      if (m.job !== insertJob || !shipSummary) return;
+      shipSummary.groups = m.groups;
+      renderShipCost();
+      renderShipStats();
       break;
     }
     case 'insertError': {
@@ -378,7 +415,11 @@ function selectLayer(L: number): void {
     const role = shipSummary.topLoad ? (r0 === 'base' ? 'pocket' : 'lid pad') : r0;
     ui.readout.textContent =
       `${layerName(L)} · ${role === 'layer' ? '' : `${role} · `}` +
-      `${thicknessLabel(shipSummary.thickness[L]).replace('in', ' in')} · z ${mm(z0)}–${mm(z1)} mm`;
+      `${thicknessLabel(shipSummary.thickness[L]).replace('in', ' in')} · z ${mm(z0)}–${mm(z1)} mm` +
+      (layerStates[L]?.removed ? ' · removed' : layerStates[L]?.hidden ? ' · hidden' : '');
+    ui.layerList
+      .querySelectorAll('.layer-row')
+      .forEach((row, i) => row.classList.toggle('selected', i === L));
   } else {
     ui.readout.textContent = `${layerName(L)} · z ${mm(z0)}–${mm(z1)} mm`;
   }
@@ -576,6 +617,8 @@ function setMode(next: 'slicer' | 'ship'): void {
   ui.emptyTitle.textContent =
     mode === 'ship' ? 'Drop the STL of the item you want to ship' : 'Drop an STL file here';
   ui.explode.value = '0';
+  stopAnimation();
+  unlockAll();
   stackView.setExplode(0);
   stackView.clear();
   layerView.setData(null, [1, 1]);
@@ -628,7 +671,7 @@ function prepareShip(newItem: boolean): void {
     if (best.margin >= s.minCushion) {
       ship.setOrientation(best.axis, best.turn90);
     } else {
-      const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance);
+      const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, ship.searchBoxes());
       if (b) {
         ship.setBox(b.box);
         const o = rankOrientations(ship.scaledSize(), ship.settings())[0];
@@ -667,13 +710,22 @@ function onShipInput(name: string): void {
     const k = ship.factors()[2];
     ship.setItemFactors([k, k, k]);
   } else if (name === 'boxPreset') {
+    syncBoxUi();
     if (!ship.applyPreset()) return;
     reframeNext = true;
-  } else if (name === 'boxL' || name === 'boxW' || name === 'boxH') {
+  } else if (name === 'boxMeasure') {
+    // Keep the same inside size when switching between inside/outside sizes.
+    const inside = lastInside;
+    syncBoxUi();
+    ship.setBox(inside);
+    reframeNext = true;
+  } else if (name === 'boxWall' || name === 'boxL' || name === 'boxW' || name === 'boxH') {
     ship.syncPreset();
     reframeNext = true;
   }
   ui.itemScaleHint.textContent = ship.scaleHint();
+  syncBoxUi();
+  if (name === 'boxName' || name === 'boxSearch') return;
   if (PRICE_FIELDS.has(name)) return renderShipCost();
   if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
   if (
@@ -703,8 +755,10 @@ ui.autoOrientBtn.addEventListener('click', () => {
 ui.smallestBoxBtn.addEventListener('click', () => {
   if (!model) return toast('Load the item first', 'error');
   const s = ship.settings();
-  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance);
-  if (!b) return toast('No standard box is big enough — enter a custom size', 'error');
+  const list = ship.searchBoxes();
+  if (!list.length) return toast('No saved boxes yet — save one or search standard sizes', 'error');
+  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, list);
+  if (!b) return toast('None of these boxes is big enough — enter a custom size', 'error');
   ship.setBox(b.box);
   const best = rankOrientations(ship.scaledSize(), ship.settings())[0];
   ship.setOrientation(best.axis, best.turn90);
@@ -715,6 +769,7 @@ ui.smallestBoxBtn.addEventListener('click', () => {
 function showShipError(message: string): void {
   shipError = message;
   shipSummary = null;
+  renderLayerList();
   layers = null;
   stackView.clear();
   layerView.setData(null, [1, 1]);
@@ -755,11 +810,17 @@ function renderReport(): void {
     return;
   }
   const r = S.report;
+  const warnings = [...r.warnings, ...layerWarnings()];
   const play = r.playUp + r.playDown;
   const minC = ship.settings().minCushion;
   const weak =
     r.sideWall < minC - 0.05 || r.bottomCushion < minC - 0.05 || r.topCushion < minC - 0.05;
-  const state = r.warnings.length === 0 ? 'good' : play > 3 || r.sideWall < 6 ? 'bad' : 'check';
+  const state =
+    warnings.length === 0
+      ? 'good'
+      : play > 3 || r.sideWall < 6 || removedPocketLayers() > 0
+        ? 'bad'
+        : 'check';
   st.dataset.state = state;
   st.textContent =
     state === 'good'
@@ -809,6 +870,11 @@ function renderReport(): void {
     ],
   ];
   if (r.islands) rows.push(['Loose inserts', `${r.islands} (glue in place)`]);
+  const removed = layerStates.flatMap((st, i) => (st.removed ? [i] : []));
+  if (removed.length) {
+    const h = removed.reduce((a, i) => a + S.thickness[i], 0);
+    rows.push(['Removed', `${removed.map(layerName).join(', ')} (−${L(h)})`]);
+  }
   for (const [k, v] of rows) {
     const dt = document.createElement('dt');
     dt.textContent = k;
@@ -816,7 +882,7 @@ function renderReport(): void {
     dd.textContent = v;
     grid.append(dt, dd);
   }
-  for (const w of r.warnings) {
+  for (const w of warnings) {
     const li = document.createElement('li');
     li.textContent = w;
     warn.append(li);
@@ -888,4 +954,269 @@ ui.itemResetBtn.addEventListener('click', () => {
   ui.itemScaleHint.textContent = ship.scaleHint();
   reframeNext = true;
   computeInsertSoon();
+});
+
+// ---------------------------------------------------------------------------
+// Custom boxes
+
+let lastInside: [number, number, number] = ship.box();
+
+function syncBoxUi(): void {
+  const outside =
+    (form.form.elements.namedItem('boxMeasure') as HTMLSelectElement).value === 'outside';
+  ui.wallField.hidden = !outside;
+  const hint = ship.insideHint();
+  ui.boxInsideHint.hidden = !hint;
+  ui.boxInsideHint.textContent = hint;
+  ui.deleteBoxBtn.hidden = !ship.selectedSavedBox();
+  lastInside = ship.box();
+}
+
+ui.saveBoxBtn.addEventListener('click', () => {
+  const name = ship.boxName();
+  if (!name) return toast('Give the box a name first', 'error');
+  const b = saveBox(name, ship.box());
+  ship.fillPresets();
+  (form.form.elements.namedItem('boxPreset') as HTMLSelectElement).value = `c:${b.id}`;
+  syncBoxUi();
+  toast(`Saved “${name}” to My boxes`);
+});
+
+ui.deleteBoxBtn.addEventListener('click', () => {
+  const b = ship.selectedSavedBox();
+  if (!b) return;
+  deleteBox(b.id);
+  ship.fillPresets();
+  (form.form.elements.namedItem('boxPreset') as HTMLSelectElement).value = '';
+  syncBoxUi();
+  toast(`Deleted “${b.name}”`);
+});
+syncBoxUi();
+
+// ---------------------------------------------------------------------------
+// Layer list: hide / lock / remove, packing animation
+
+interface LayerState {
+  hidden: boolean;
+  locked: boolean;
+  removed: boolean;
+}
+let layerStates: LayerState[] = [];
+
+const activeLayers = () => layerStates.filter((st) => !st.removed);
+const allLocked = () => activeLayers().length > 0 && activeLayers().every((st) => st.locked);
+function designLocked(): boolean {
+  return mode === 'ship' && !!shipSummary && allLocked();
+}
+
+function unlockAll(): void {
+  layerStates = [];
+  applyDesignLock();
+}
+
+function removedPocketLayers(): number {
+  if (!shipSummary || !layers) return 0;
+  let n = 0;
+  layerStates.forEach((st, i) => {
+    if (st.removed && layers!.layerLoops[i + 1] - layers!.layerLoops[i] > 1) n++;
+  });
+  return n;
+}
+
+function layerWarnings(): string[] {
+  const S = shipSummary;
+  if (!S) return [];
+  const out: string[] = [];
+  const removed = layerStates.flatMap((st, i) => (st.removed ? [i] : []));
+  if (removed.length) {
+    const h = removed.reduce((a, i) => a + S.thickness[i], 0);
+    out.push(
+      `${removed.length} layer${removed.length > 1 ? 's' : ''} removed — the stack is ${ship.fmtLen(h)} short of the box; fill the gap so nothing rattles`,
+    );
+  }
+  if (removedPocketLayers())
+    out.push('A removed layer held the item — the item is no longer fully supported');
+  return out;
+}
+
+function applyLayerVisibility(): void {
+  const v = layerStates.map((st) => !st.hidden && !st.removed);
+  stackView.setLayerVisibility(v.every(Boolean) ? null : v);
+}
+
+function syncRemoved(): void {
+  send({
+    type: 'insertRemoved',
+    job: insertJob,
+    removed: layerStates.flatMap((st, i) => (st.removed ? [i] : [])),
+  });
+}
+
+function applyDesignLock(): void {
+  const locked = designLocked();
+  form.form
+    .querySelectorAll<HTMLFieldSetElement>(
+      'fieldset[data-mode="ship"]:not(.keep-enabled), #labelsFieldset, #nestFieldset',
+    )
+    .forEach((f) => {
+      f.disabled = locked;
+    });
+  ui.playBtn.disabled = !locked || !layers;
+  ui.playHint.textContent = locked
+    ? 'Design locked. Unlock a layer to edit settings again.'
+    : 'Lock all layers to play the packing animation.';
+  ui.lockAllBtn.textContent = allLocked() ? 'Unlock all' : 'Lock all';
+}
+
+const svgIcon = (id: string) => `<svg aria-hidden="true"><use href="#${id}"></use></svg>`;
+
+function renderLayerList(): void {
+  const S = shipSummary;
+  const list = ui.layerList;
+  list.innerHTML = '';
+  if (!S) {
+    applyDesignLock();
+    return;
+  }
+  layerStates.forEach((st, i) => {
+    const li = document.createElement('li');
+    li.className =
+      'layer-row' +
+      (i === current ? ' selected' : '') +
+      (st.hidden ? ' hidden-layer' : '') +
+      (st.removed ? ' removed' : '');
+    const role = S.topLoad ? (S.roles[i] === 'base' ? 'pocket' : 'lid pad') : S.roles[i];
+    const name = `${layerName(i)} · ${role === 'layer' ? '' : `${role} · `}${thicknessLabel(S.thickness[i]).replace('in', ' in')}`;
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'icon-btn';
+    eye.innerHTML = svgIcon(st.hidden ? 'i-eye-off' : 'i-eye');
+    eye.setAttribute('aria-label', `${st.hidden ? 'Show' : 'Hide'} ${layerName(i)}`);
+    eye.title = st.hidden ? 'Show layer' : 'Hide layer';
+    eye.disabled = st.removed;
+    eye.addEventListener('click', () => {
+      stopAnimation();
+      st.hidden = !st.hidden;
+      applyLayerVisibility();
+      renderLayerList();
+    });
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'layer-name';
+    label.innerHTML = `<b>${name.split(' · ')[0]}</b> · ${name.split(' · ').slice(1).join(' · ')}${st.removed ? ' (removed)' : ''}`;
+    label.addEventListener('click', () => {
+      ui.slider.value = String(i);
+      selectLayer(i);
+    });
+    const lock = document.createElement('button');
+    lock.type = 'button';
+    lock.className = 'icon-btn';
+    lock.innerHTML = svgIcon(st.locked ? 'i-lock' : 'i-unlock');
+    lock.setAttribute('aria-pressed', String(st.locked));
+    lock.setAttribute('aria-label', `${st.locked ? 'Unlock' : 'Lock'} ${layerName(i)}`);
+    lock.title = st.locked ? 'Unlock layer' : 'Lock layer';
+    lock.disabled = st.removed;
+    lock.addEventListener('click', () => {
+      stopAnimation();
+      st.locked = !st.locked;
+      renderLayerList();
+    });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'icon-btn';
+    del.innerHTML = svgIcon(st.removed ? 'i-undo' : 'i-trash');
+    del.setAttribute('aria-label', `${st.removed ? 'Restore' : 'Remove'} ${layerName(i)}`);
+    del.title = st.locked ? 'Unlock to remove' : st.removed ? 'Restore layer' : 'Remove layer';
+    del.disabled = st.locked;
+    del.addEventListener('click', () => {
+      stopAnimation();
+      st.removed = !st.removed;
+      if (st.removed) st.hidden = false;
+      applyLayerVisibility();
+      syncRemoved();
+      renderLayerList();
+      renderReport();
+      renderShipStats();
+      selectLayer(current);
+    });
+    li.append(eye, label, lock, del);
+    list.append(li);
+  });
+  applyDesignLock();
+}
+
+ui.showAllBtn.addEventListener('click', () => {
+  stopAnimation();
+  for (const st of layerStates) st.hidden = false;
+  applyLayerVisibility();
+  renderLayerList();
+});
+
+ui.lockAllBtn.addEventListener('click', () => {
+  stopAnimation();
+  const lock = !allLocked();
+  for (const st of layerStates) if (!st.removed) st.locked = lock;
+  renderLayerList();
+});
+
+// ---- Packing animation ----
+
+function assemblySteps(): AssemblyStep[] {
+  const S = shipSummary!;
+  const n = S.thickness.length;
+  const keep = (i: number) => !layerStates[i]?.removed;
+  const t = (i: number) => thicknessLabel(S.thickness[i]).replace('in', ' in');
+  // The item goes in after the pocket/base layers (contour style: after the layers below it).
+  let itemAfter = S.baseCount;
+  if (!S.roles.includes('base') && layers) {
+    itemAfter = 0;
+    while (itemAfter < n && layers.layerGhost[itemAfter + 1] === layers.layerGhost[itemAfter])
+      itemAfter++;
+  }
+  const steps: AssemblyStep[] = [];
+  for (let i = 0; i < n; i++) {
+    if (i === itemAfter) steps.push({ kind: 'item', label: 'Placing the item' });
+    if (!keep(i)) continue;
+    const role = S.topLoad
+      ? S.roles[i] === 'base'
+        ? 'pocket layer'
+        : 'lid pad'
+      : S.roles[i] === 'layer'
+        ? 'layer'
+        : `${S.roles[i]} layer`;
+    steps.push({ kind: 'layer', index: i, label: `${layerName(i)} · ${role} · ${t(i)}` });
+  }
+  if (itemAfter >= n) steps.push({ kind: 'item', label: 'Placing the item' });
+  return steps;
+}
+
+let captionTimer = 0;
+function stopAnimation(): void {
+  if (!stackView.animating) return;
+  stackView.stopAnimation();
+  ui.animCaption.hidden = true;
+  ui.playBtn.textContent = '▶ Play packing animation';
+}
+
+ui.playBtn.addEventListener('click', () => {
+  if (stackView.animating) return stopAnimation();
+  if (!designLocked()) return;
+  showView('3d');
+  ui.explode.value = '0';
+  stackView.setExplode(0);
+  clearTimeout(captionTimer);
+  ui.playBtn.textContent = '■ Stop animation';
+  ui.animCaption.hidden = false;
+  const steps = assemblySteps();
+  stackView.playAssembly(
+    steps,
+    (label, i) => {
+      ui.animCaption.textContent = `${i + 1}/${steps.length} · ${label}`;
+    },
+    () => {
+      ui.animCaption.textContent = 'Packed — ready to ship ✓';
+      ui.playBtn.textContent = '↺ Back to editing view';
+      captionTimer = window.setTimeout(() => (ui.animCaption.hidden = true), 3000);
+    },
+  );
 });
