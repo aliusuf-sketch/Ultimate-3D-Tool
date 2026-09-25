@@ -100,7 +100,7 @@ export type FromWorker =
       extras: PackedExtras;
       item: Float32Array;
     }
-  | { type: 'insertError'; job: number; message: string }
+  | { type: 'insertError'; job: number; message: string; item?: Float32Array }
   | { type: 'insertGroups'; job: number; groups: InsertGroupSummary[] }
   | { type: 'exported'; job: number; zip: Uint8Array; fileCount: number }
   | { type: 'layerSvg'; job: number; name: string; svg: string }

@@ -41,6 +41,10 @@ export const SHIP_FIELDS = new Set([
   'baseCount',
   'topCount',
   'boxMeasure',
+  'orientMode',
+  'boxMode',
+  'boxSearch',
+  'insertMode',
   'itemScale',
   'itemLock',
   'shipAxis',
@@ -155,8 +159,35 @@ export class ShipForm {
     const mode = this.select('boxSearch');
     const mine = loadBoxes().map((b) => b.box);
     if (mode === 'mine') return mine;
-    if (mode === 'standard') return STANDARD_BOXES_MM;
+    if (mode === 'standard' || mode === 'exact') return STANDARD_BOXES_MM;
     return [...mine, ...STANDARD_BOXES_MM];
+  }
+
+  orientMode(): 'auto' | 'manual' {
+    return this.radio('orientMode') === 'manual' ? 'manual' : 'auto';
+  }
+
+  boxMode(): 'auto' | 'manual' {
+    return this.radio('boxMode') === 'manual' ? 'manual' : 'auto';
+  }
+
+  setBoxMode(m: 'auto' | 'manual'): void {
+    const r = document.querySelector<HTMLInputElement>(`input[name="boxMode"][value="${m}"]`);
+    if (r) r.checked = true;
+  }
+
+  boxSource(): string {
+    return this.select('boxSearch');
+  }
+
+  setBoxSource(v: string): void {
+    (this.f.form.elements.namedItem('boxSearch') as HTMLSelectElement).value = v;
+  }
+
+  /** Name of a saved box with these inside dimensions, if any. */
+  savedBoxName(box: [number, number, number]): string | null {
+    const b = loadBoxes().find((x) => x.box.every((v, i) => Math.abs(v - box[i]) < 0.05));
+    return b ? b.name : null;
   }
 
   selectedSavedBox(): SavedBox | null {

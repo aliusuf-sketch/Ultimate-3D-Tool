@@ -119,17 +119,7 @@
               data-mode="ship"
               aria-selected="false"
             >
-              <span class="step-n">1</span>Item
-            </button>
-            <button
-              type="button"
-              role="tab"
-              class="step-tab"
-              data-step="box"
-              data-mode="ship"
-              aria-selected="false"
-            >
-              <span class="step-n">2</span>Box
+              <span class="step-n">1</span>Ship
             </button>
             <button
               type="button"
@@ -139,7 +129,17 @@
               data-mode="ship"
               aria-selected="false"
             >
-              <span class="step-n">3</span>Foam
+              <span class="step-n">2</span>Foam
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="step-tab"
+              data-step="box"
+              data-mode="ship"
+              aria-selected="false"
+            >
+              <span class="step-n">3</span>Box
             </button>
             <button
               type="button"
@@ -192,36 +192,77 @@
             </button>
           </nav>
           <form id="settings" autocomplete="off" novalidate>
-            <!-- ---------- Shipping: 1 Item ---------- -->
+            <!-- ---------- Shipping: 1 How to ship (item) ---------- -->
             <section class="step" data-step="item" data-mode="ship">
               <fieldset data-mode="ship">
-                <legend>Which way up?</legend>
-                <div class="field">
-                  <span class="label" id="upLabel">Model axis pointing up</span>
-                  <div class="segmented" role="radiogroup" aria-labelledby="upLabel">
-                    <label
-                      ><input type="radio" name="shipAxis" value="z" checked /><span>Z</span></label
-                    ><label><input type="radio" name="shipAxis" value="y" /><span>Y</span></label
-                    ><label><input type="radio" name="shipAxis" value="x" /><span>X</span></label>
-                  </div>
+                <legend>How will it ship?</legend>
+                <div class="choice-cards" role="radiogroup" aria-label="Insert style">
+                  <label class="choice"
+                    ><input type="radio" name="insertMode" value="topLoad" checked /><span
+                      ><b>Open-top pocket</b
+                      ><small>Drop the item in and lift it out from the top.</small></span
+                    ></label
+                  >
+                  <label class="choice"
+                    ><input type="radio" name="insertMode" value="twoPart" /><span
+                      ><b>Base + lid</b
+                      ><small>Split at the widest point; the lid half covers the item.</small></span
+                    ></label
+                  >
+                  <label class="choice"
+                    ><input type="radio" name="insertMode" value="contour" /><span
+                      ><b>Follow the shape</b
+                      ><small>Each layer hugs the item (soft, flexible foam).</small></span
+                    ></label
+                  >
                 </div>
-                <div class="checks">
-                  <label class="check"><input type="checkbox" name="turn90" /> Turn 90°</label>
-                  <label class="check"><input type="checkbox" name="flip" /> Upside down</label>
-                </div>
-                <button class="btn btn-small btn-block" type="button" id="autoOrientBtn">
-                  Pick the best orientation for this box
-                </button>
               </fieldset>
               <fieldset data-mode="ship">
-                <legend>Size</legend>
+                <legend>Orientation</legend>
+                <div class="field">
+                  <span class="label" id="orientModeLabel">How it sits in the box</span>
+                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="orientModeLabel">
+                    <label
+                      ><input type="radio" name="orientMode" value="auto" checked /><span
+                        >Auto</span
+                      ></label
+                    ><label
+                      ><input type="radio" name="orientMode" value="manual" /><span
+                        >Manual (locked)</span
+                      ></label
+                    >
+                  </div>
+                </div>
+                <p class="hint hint-top" id="orientHint">
+                  Auto picks the orientation that needs the smallest box.
+                </p>
+                <div id="orientManual" hidden>
+                  <div class="field">
+                    <span class="label" id="upLabel">Model axis pointing up</span>
+                    <div class="segmented" role="radiogroup" aria-labelledby="upLabel">
+                      <label
+                        ><input type="radio" name="shipAxis" value="z" checked /><span
+                          >Z</span
+                        ></label
+                      ><label><input type="radio" name="shipAxis" value="y" /><span>Y</span></label
+                      ><label><input type="radio" name="shipAxis" value="x" /><span>X</span></label>
+                    </div>
+                  </div>
+                  <div class="checks">
+                    <label class="check"><input type="checkbox" name="turn90" /> Turn 90°</label>
+                    <label class="check"><input type="checkbox" name="flip" /> Upside down</label>
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset data-mode="ship">
+                <legend>Item size</legend>
                 <div class="row">
                   <label class="field"
-                    ><span class="label">STL units</span
+                    ><span class="label">STL is in</span
                     ><select name="stlUnits">
                       <option value="1" selected>mm</option>
                       <option value="10">cm</option>
-                      <option value="25.4">inch</option>
+                      <option value="25.4">inches</option>
                     </select></label
                   >
                   <label class="field"
@@ -262,105 +303,12 @@
                 </div>
                 <p class="hint" id="itemScaleHint">Scale 100 %</p>
               </fieldset>
-              <button type="button" class="btn btn-block btn-next" data-goto="box">
-                Next: Box →
-              </button>
-            </section>
-
-            <!-- ---------- Shipping: 2 Box ---------- -->
-            <section class="step" data-step="box" data-mode="ship">
-              <fieldset data-mode="ship">
-                <legend>Box</legend>
-                <label class="field"
-                  ><span class="label">Size</span
-                  ><select name="boxPreset" id="boxPreset"></select
-                ></label>
-                <div class="row row-3">
-                  <label class="field"
-                    ><span class="label">Length (<span class="u">in</span>)</span
-                    ><input
-                      type="number"
-                      name="boxL"
-                      value="8"
-                      step="any"
-                      inputmode="decimal"
-                      min="0.1"
-                  /></label>
-                  <label class="field"
-                    ><span class="label">Width (<span class="u">in</span>)</span
-                    ><input
-                      type="number"
-                      name="boxW"
-                      value="8"
-                      step="any"
-                      inputmode="decimal"
-                      min="0.1"
-                  /></label>
-                  <label class="field"
-                    ><span class="label">Depth (<span class="u">in</span>)</span
-                    ><input
-                      type="number"
-                      name="boxH"
-                      value="8"
-                      step="any"
-                      inputmode="decimal"
-                      min="0.1"
-                  /></label>
-                </div>
-                <div class="row">
-                  <label class="field"
-                    ><span class="label">Sizes are</span
-                    ><select name="boxMeasure">
-                      <option value="inside" selected>Inside</option>
-                      <option value="outside">Outside</option>
-                    </select></label
-                  >
-                  <label class="field" id="wallField" hidden
-                    ><span class="label">Wall (<span class="u">in</span>)</span
-                    ><input
-                      type="number"
-                      name="boxWall"
-                      value="0.125"
-                      min="0"
-                      step="any"
-                      inputmode="decimal"
-                  /></label>
-                </div>
-                <p class="hint hint-top" id="boxInsideHint" hidden></p>
-                <button class="btn btn-small btn-block" type="button" id="smallestBoxBtn">
-                  Find the smallest box that fits
-                </button>
-                <details class="more">
-                  <summary>My boxes</summary>
-                  <div class="save-box">
-                    <input
-                      type="text"
-                      name="boxName"
-                      maxlength="40"
-                      placeholder="Name this box"
-                      aria-label="Custom box name"
-                    />
-                    <button class="btn btn-small" type="button" id="saveBoxBtn">Save</button>
-                    <button class="btn btn-small" type="button" id="deleteBoxBtn" hidden>
-                      Delete
-                    </button>
-                  </div>
-                  <label class="field"
-                    ><span class="label">“Smallest box” searches</span
-                    ><select name="boxSearch">
-                      <option value="all" selected>My boxes + standard sizes</option>
-                      <option value="mine">My boxes only</option>
-                      <option value="standard">Standard sizes only</option>
-                    </select></label
-                  >
-                </details>
-              </fieldset>
               <button type="button" class="btn btn-block btn-next" data-goto="foam">
                 Next: Foam →
               </button>
             </section>
 
-            <!-- ---------- Shipping: 3 Foam ---------- -->
+            <!-- ---------- Shipping: 2 Foam ---------- -->
             <section class="step" data-step="foam" data-mode="ship">
               <fieldset data-mode="ship">
                 <legend>Base &amp; top</legend>
@@ -608,6 +556,129 @@
                   >
                 </details>
               </fieldset>
+              <button type="button" class="btn btn-block btn-next" data-goto="box">
+                Next: Box →
+              </button>
+            </section>
+
+            <!-- ---------- Shipping: 3 Box ---------- -->
+            <section class="step" data-step="box" data-mode="ship">
+              <fieldset data-mode="ship">
+                <legend>Box</legend>
+                <div class="field">
+                  <span class="label" id="boxModeLabel">Choose the box</span>
+                  <div class="segmented seg-2" role="radiogroup" aria-labelledby="boxModeLabel">
+                    <label
+                      ><input type="radio" name="boxMode" value="auto" checked /><span
+                        >Best fit</span
+                      ></label
+                    ><label
+                      ><input type="radio" name="boxMode" value="manual" /><span
+                        >I have a box</span
+                      ></label
+                    >
+                  </div>
+                </div>
+                <div class="row">
+                  <label class="field"
+                    ><span class="label">Foam on each side (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="minCushion"
+                      value="1"
+                      step="any"
+                      inputmode="decimal"
+                      min="0"
+                  /></label>
+                  <label class="field" id="boxSourceField"
+                    ><span class="label">Pick from</span
+                    ><select name="boxSearch">
+                      <option value="exact">Exact size (custom box)</option>
+                      <option value="all" selected>My boxes + standard</option>
+                      <option value="mine">My boxes only</option>
+                      <option value="standard">Standard sizes only</option>
+                    </select></label
+                  >
+                </div>
+                <div id="boxManualUi" hidden>
+                  <label class="field"
+                    ><span class="label">Size</span
+                    ><select name="boxPreset" id="boxPreset"></select
+                  ></label>
+                </div>
+                <div class="row row-3">
+                  <label class="field"
+                    ><span class="label">Length (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxL"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Width (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxW"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                  <label class="field"
+                    ><span class="label">Depth (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxH"
+                      value="8"
+                      step="any"
+                      inputmode="decimal"
+                      min="0.1"
+                  /></label>
+                </div>
+                <p class="hint hint-top" id="boxHint"></p>
+                <div class="row" id="boxMeasureRow" hidden>
+                  <label class="field"
+                    ><span class="label">Sizes are</span
+                    ><select name="boxMeasure">
+                      <option value="inside" selected>Inside</option>
+                      <option value="outside">Outside</option>
+                    </select></label
+                  >
+                  <label class="field" id="wallField" hidden
+                    ><span class="label">Wall (<span class="u">in</span>)</span
+                    ><input
+                      type="number"
+                      name="boxWall"
+                      value="0.125"
+                      min="0"
+                      step="any"
+                      inputmode="decimal"
+                  /></label>
+                </div>
+                <p class="hint hint-top" id="boxInsideHint" hidden></p>
+                <button class="btn btn-small btn-block" type="button" id="smallestBoxBtn" hidden>
+                  Suggest the smallest box that fits
+                </button>
+                <details class="more">
+                  <summary>My boxes</summary>
+                  <div class="save-box">
+                    <input
+                      type="text"
+                      name="boxName"
+                      maxlength="40"
+                      placeholder="Name this box"
+                      aria-label="Custom box name"
+                    />
+                    <button class="btn btn-small" type="button" id="saveBoxBtn">Save</button>
+                    <button class="btn btn-small" type="button" id="deleteBoxBtn" hidden>
+                      Delete
+                    </button>
+                  </div>
+                </details>
+              </fieldset>
               <button type="button" class="btn btn-block btn-next" data-goto="fit">
                 Next: Fit →
               </button>
@@ -617,14 +688,6 @@
             <section class="step" data-step="fit" data-mode="ship">
               <fieldset data-mode="ship">
                 <legend>Fit</legend>
-                <label class="field"
-                  ><span class="label">Insert style</span
-                  ><select name="insertMode">
-                    <option value="topLoad" selected>Open-top pocket (lift the item out)</option>
-                    <option value="twoPart">Base + lid split at the widest point</option>
-                    <option value="contour">Follow the shape in every layer (soft foam)</option>
-                  </select></label
-                >
                 <div class="row">
                   <label class="field"
                     ><span class="label">Gap around item (mm)</span
@@ -637,21 +700,6 @@
                       min="0"
                   /></label>
                   <label class="field"
-                    ><span class="label">Min side foam (<span class="u">in</span>)</span
-                    ><input
-                      type="number"
-                      name="minCushion"
-                      value="1"
-                      step="any"
-                      inputmode="decimal"
-                      min="0"
-                  /></label>
-                </div>
-                <div class="row">
-                  <label class="check check-field"
-                    ><input type="checkbox" name="notches" checked /> Finger notches</label
-                  >
-                  <label class="field"
                     ><span class="label">Notch diameter (mm)</span
                     ><input
                       type="number"
@@ -662,6 +710,10 @@
                       min="5"
                   /></label>
                 </div>
+                <label class="check"
+                  ><input type="checkbox" name="notches" checked /> Finger notches to lift the item
+                  out</label
+                >
                 <details class="more">
                   <summary>More options</summary>
                   <div class="row">
@@ -1012,6 +1064,13 @@
               <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
             </div>
             <div class="anim-caption" id="animCaption" hidden aria-live="polite"></div>
+            <div class="fit-error" id="fitError" hidden role="alert">
+              <strong>Won’t fit</strong>
+              <p id="fitErrorMsg"></p>
+              <button class="btn btn-primary btn-small" type="button" id="fitErrorBtn">
+                Use the best-fit box
+              </button>
+            </div>
             <div class="cost-card" id="costCard" hidden aria-live="polite">
               <div class="cost-total" id="costTotal">—</div>
               <div class="cost-detail" id="costDetail"></div>

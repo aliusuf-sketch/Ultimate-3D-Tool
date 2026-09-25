@@ -1096,3 +1096,87 @@ details.more[open] > summary::before {
     transition: none !important;
   }
 }
+
+/* ---- Choice cards (how it ships) ---- */
+.choice-cards {
+  display: grid;
+  gap: 6px;
+}
+.choice {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.choice span {
+  display: block;
+  padding: 8px 10px 8px 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  position: relative;
+}
+.choice span::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 11px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+.choice b {
+  display: block;
+  font-size: 14px;
+}
+.choice small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.choice input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.choice input:checked + span::before {
+  border-color: var(--accent);
+  background: radial-gradient(var(--accent) 45%, transparent 50%);
+}
+.choice input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input[readonly] {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+/* ---- Won't-fit overlay ---- */
+.fit-error {
+  position: absolute;
+  left: 50%;
+  top: 58px;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 24px));
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: rgba(120, 18, 18, 0.9);
+  color: #fff;
+  text-align: center;
+  z-index: 1;
+}
+.fit-error strong {
+  font: 700 18px/1.2 var(--font-cond);
+}
+.fit-error p {
+  margin: 4px 0 8px;
+  font-size: 13px;
+}

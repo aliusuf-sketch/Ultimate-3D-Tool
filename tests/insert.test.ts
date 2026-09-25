@@ -321,3 +321,34 @@ describe('base and top layers', () => {
     expect(r.roles[last]).toBe('lid');
   });
 });
+
+describe('box suggestions', () => {
+  it('exact box = item + side foam, and base + whole pocket sheets + top', async () => {
+    const { exactBox } = await import('../src/core/insert');
+    const b = exactBox(
+      [100, 60, 140],
+      {
+        cushion: IN,
+        clearance: 1,
+        base: IN,
+        top: 0,
+        thinnest: IN / 2,
+        preload: 1.5,
+        round: 5,
+      },
+      [{ axis: 'z', turn90: false }],
+    );
+    expect(b.box[0]).toBe(155); // 100 + 2*(25.4 + 1) = 152.8, rounded up to 5 mm
+    expect(b.box[1]).toBe(115);
+    // pocket: ceil((140-1.5)/12.7) = 11 sheets = 139.7
+    expect(b.box[2]).toBeCloseTo(IN + 139.7, 6);
+  });
+
+  it('smallest box keeps a locked orientation', async () => {
+    const { smallestBox } = await import('../src/core/insert');
+    const locked = [{ axis: 'z' as const, turn90: false }];
+    const b = smallestBox([60, 60, 200], IN, 1, undefined, { below: IN, above: 0 }, locked)!;
+    expect(b.axis).toBe('z');
+    expect(b.box[2]).toBeGreaterThanOrEqual(IN + 200);
+  });
+});

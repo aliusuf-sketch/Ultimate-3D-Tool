@@ -499,6 +499,8 @@ export function smallestBox(
   boxes: [number, number, number][] = STANDARD_BOXES_MM,
   /** Fixed foam under/over the item (mm); defaults to `cushion` each. */
   vertical?: { below: number; above: number },
+  /** Only try these orientations (e.g. the one the user locked). */
+  orientations: { axis: StackAxis; turn90: boolean }[] = ORIENTATIONS,
 ) {
   let best: {
     box: [number, number, number];
@@ -507,7 +509,7 @@ export function smallestBox(
     volume: number;
   } | null = null;
   for (const box of boxes) {
-    for (const o of ORIENTATIONS) {
+    for (const o of orientations) {
       // Boxes can be used on any side; the preset lists L >= W, H is free.
       const d = orientedDims(src, o.axis, o.turn90);
       const ok = vertical
@@ -521,6 +523,46 @@ export function smallestBox(
     }
   }
   return best;
+}
+
+/**
+ * Exact (custom) box for an item: side foam + clearance around the footprint, and a
+ * height of base + pocket + top where the pocket is whole sheets of the thinnest foam.
+ * Lengths are rounded up to `round` mm. Tries the given orientations; smallest wins.
+ */
+export function exactBox(
+  src: [number, number, number],
+  opts: {
+    cushion: number;
+    clearance: number;
+    base: number;
+    top: number;
+    thinnest: number;
+    preload: number;
+    round: number;
+  },
+  orientations: { axis: StackAxis; turn90: boolean }[] = ORIENTATIONS,
+) {
+  const up = (v: number) => Math.ceil(v / opts.round - 1e-6) * opts.round;
+  let best: {
+    box: [number, number, number];
+    axis: StackAxis;
+    turn90: boolean;
+    volume: number;
+  } | null = null;
+  for (const o of orientations) {
+    const d = orientedDims(src, o.axis, o.turn90);
+    const side = 2 * (opts.cushion + opts.clearance);
+    const t = opts.thinnest > 0 ? opts.thinnest : 25.4;
+    const pocket = Math.max(1, Math.ceil((d[2] - opts.preload) / t - 1e-6)) * t;
+    const a = up(d[0] + side),
+      b = up(d[1] + side);
+    // L runs along the oriented item's X, W along its Y (the layer outline frame).
+    const box: [number, number, number] = [a, b, opts.base + pocket + opts.top];
+    const volume = box[0] * box[1] * box[2];
+    if (!best || volume < best.volume - 1e-6) best = { box, ...o, volume };
+  }
+  return best!;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,12 @@ import { extrasTransferables, packedTransferables, packExtras, packLayers } from
 import { sliceModelIter } from '../core/pipeline';
 import { buildPreview, previewTolerance } from '../core/preview';
 import { makeTorus, makeVase } from '../core/sample';
-import { buildInsertIter, type InsertResult, type InsertSettings } from '../core/insert';
+import {
+  buildInsertIter,
+  orientItem,
+  type InsertResult,
+  type InsertSettings,
+} from '../core/insert';
 import {
   buildInsertFiles,
   insertLabelText,
@@ -232,7 +237,27 @@ async function doInsert(): Promise<void> {
   } catch (e) {
     if (e instanceof Cancelled) throw e;
     insertDone = { job, sourceVersion: version, data: null };
-    post({ type: 'insertError', job, message: e instanceof Error ? e.message : String(e) });
+    // Still send the oriented item, centred in the box, so it can be shown with the error.
+    let item: Float32Array | undefined;
+    try {
+      const o = orientItem(src.mesh, settings.axis, settings.turn90, settings.flip, settings.scale);
+      const [L, W] = settings.box;
+      const base = (settings.baseLayers ?? []).reduce((a, t) => a + t, 0);
+      item = o.positions;
+      const dx = (L - o.size[0]) / 2,
+        dy = (W - o.size[1]) / 2;
+      for (let i = 0; i < item.length; i += 3) {
+        item[i] += dx;
+        item[i + 1] += dy;
+        item[i + 2] += base;
+      }
+    } catch {
+      item = undefined;
+    }
+    post(
+      { type: 'insertError', job, message: e instanceof Error ? e.message : String(e), item },
+      item ? [item.buffer] : [],
+    );
     return;
   }
   post({ type: 'progress', stage: 'Labels and nesting', f: 1 });

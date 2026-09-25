@@ -15,7 +15,7 @@ import { estimateCost, formatMoney, MM_PER_FT } from './core/cost';
 import { ShipForm, SHIP_FIELDS, PRICE_FIELDS } from './ui/shipForm';
 import { deleteBox, saveBox } from './ui/boxStore';
 import type { AssemblyStep } from './view3d/stack';
-import { orientedDims, rankOrientations, smallestBox } from './core/insert';
+import { exactBox, ORIENTATIONS, rankOrientations, smallestBox } from './core/insert';
 import { displayRole, insertLabelText, thicknessLabel } from './core/export/insertZip';
 import type { InsertSummary } from './worker/protocol';
 
@@ -56,7 +56,11 @@ const ui = {
   reportWarn: $('reportWarn'),
   explode: $<HTMLInputElement>('explode'),
   xray: $<HTMLInputElement>('xray'),
-  autoOrientBtn: $<HTMLButtonElement>('autoOrientBtn'),
+  fitError: $('fitError'),
+  fitErrorMsg: $('fitErrorMsg'),
+  fitErrorBtn: $<HTMLButtonElement>('fitErrorBtn'),
+  orientHint: $('orientHint'),
+  boxHint: $('boxHint'),
   smallestBoxBtn: $<HTMLButtonElement>('smallestBoxBtn'),
   itemResetBtn: $<HTMLButtonElement>('itemResetBtn'),
   itemScaleHint: $('itemScaleHint'),
@@ -198,11 +202,12 @@ function computeInsert(): void {
     toast('Layers are locked — unlock them to change the design');
     return;
   }
-  const settings = ship.settings();
-  if (!settings.thicknesses.length) {
+  if (!ship.settings().thicknesses.length) {
     showShipError('Tick at least one foam thickness');
     return;
   }
+  resolveAuto();
+  const settings = ship.settings();
   insertJob++;
   send({
     type: 'insert',
@@ -289,6 +294,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       if (m.job !== insertJob || mode !== 'ship') return;
       gotInsert = m.job;
       shipError = null;
+      ui.fitError.hidden = true;
       layers = m.layers;
       shipSummary = m.summary;
       const S = m.summary;
@@ -340,7 +346,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     case 'insertError': {
       if (m.job !== insertJob || mode !== 'ship') return;
       gotInsert = m.job;
-      showShipError(m.message);
+      showShipError(m.message, m.item);
       break;
     }
     case 'exported': {
@@ -620,6 +626,7 @@ function setMode(next: 'slicer' | 'ship'): void {
   ui.emptyTitle.textContent =
     mode === 'ship' ? 'Drop the STL of the item you want to ship' : 'Drop an STL file here';
   showStep(stepState[mode]);
+  ui.fitError.hidden = true;
   ui.explode.value = '0';
   stopAnimation();
   unlockAll();
@@ -661,38 +668,14 @@ for (const b of [ui.modeSlicer, ui.modeShip]) {
 /** On a new item: pick the best orientation for the box, or a box that fits. */
 function prepareShip(newItem: boolean): void {
   if (!model) return;
-  const s = ship.settings();
   if (newItem) {
     const maxDim = Math.max(...ship.itemSize());
     if (maxDim < 25 && ship.originalSize()[0] === model.size[0]) {
       toast(
-        `Item is only ${mm(maxDim)} mm across — if the STL is in inches or cm, change “STL units”`,
+        `Item is only ${mm(maxDim)} mm across — if the STL is in inches or cm, change “STL is in”`,
         'info',
         7000,
       );
-    }
-    const best = rankOrientations(ship.scaledSize(), s)[0];
-    if (best.margin >= s.minCushion) {
-      ship.setOrientation(best.axis, best.turn90);
-    } else {
-      const b = smallestBox(
-        ship.scaledSize(),
-        s.minCushion,
-        s.clearance,
-        ship.searchBoxes(),
-        shellNeed(),
-      );
-      if (b) {
-        ship.setBox(b.box);
-        const o = rankOrientations(ship.scaledSize(), ship.settings())[0];
-        ship.setOrientation(o.axis, o.turn90);
-        toast(
-          `Box set to ${b.box.map((v) => ship.fmtLen(v, 2).split(' ')[0]).join(' × ')} ${ship.units} so the item fits with cushion`,
-        );
-      } else {
-        ship.setOrientation(best.axis, best.turn90);
-        toast('No standard box gives the full cushion — enter a custom box size', 'error', 6000);
-      }
     }
   }
   reframeNext = true;
@@ -736,7 +719,8 @@ function onShipInput(name: string): void {
   ui.itemScaleHint.textContent = ship.scaleHint();
   syncBoxUi();
   syncShell();
-  if (name === 'boxName' || name === 'boxSearch') return;
+  syncShipModes();
+  if (name === 'boxName') return;
   if (PRICE_FIELDS.has(name)) return renderShipCost();
   if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
   if (
@@ -747,42 +731,52 @@ function onShipInput(name: string): void {
   }
 }
 
-ui.autoOrientBtn.addEventListener('click', () => {
-  if (!model) return;
-  const s = ship.settings();
-  const best = rankOrientations(ship.scaledSize(), s)[0];
-  ship.setOrientation(best.axis, best.turn90);
-  const d = orientedDims(ship.scaledSize(), best.axis, best.turn90);
-  toast(
-    `Item sits ${d.map((v) => mm(v)).join(' × ')} mm in the box` +
-      (Number.isFinite(best.gap)
-        ? ` · ${best.gap < 0.05 ? 'no' : `${mm(best.gap)} mm`} vertical gap`
-        : ''),
-  );
-  reframeNext = true;
-  computeInsert();
-});
-
 ui.smallestBoxBtn.addEventListener('click', () => {
   if (!model) return toast('Load the item first', 'error');
   const s = ship.settings();
   const list = ship.searchBoxes();
   if (!list.length) return toast('No saved boxes yet — save one or search standard sizes', 'error');
-  const b = smallestBox(ship.scaledSize(), s.minCushion, s.clearance, list, shellNeed());
+  const b = smallestBox(
+    ship.scaledSize(),
+    s.minCushion,
+    s.clearance,
+    list,
+    shellNeed(),
+    allowedOrientations(),
+  );
   if (!b) return toast('None of these boxes is big enough — enter a custom size', 'error');
   ship.setBox(b.box);
-  const best = rankOrientations(ship.scaledSize(), ship.settings())[0];
-  ship.setOrientation(best.axis, best.turn90);
+  if (ship.orientMode() === 'auto') ship.setOrientation(b.axis, b.turn90);
   reframeNext = true;
   computeInsert();
 });
 
-function showShipError(message: string): void {
+function showShipError(message: string, item?: Float32Array): void {
   shipError = message;
   shipSummary = null;
   renderLayerList();
   layers = null;
   stackView.clear();
+  // Show the item and the box anyway, so it is obvious what doesn't fit.
+  const box = ship.box();
+  if (item) {
+    const empty = {
+      positions: new Float32Array(0),
+      normals: new Float32Array(0),
+      colors: new Float32Array(0),
+      layerStart: new Uint32Array([0]),
+    };
+    let top = 0;
+    for (let i = 2; i < item.length; i += 3) top = Math.max(top, item[i]);
+    stackView.setPreview(empty, [box[0], box[1], Math.max(box[2], top)], true, {
+      item,
+      box: { min: [0, 0], size: box },
+    });
+  }
+  ui.fitErrorMsg.textContent = message;
+  ui.fitErrorBtn.textContent =
+    ship.boxMode() === 'auto' ? 'Use an exact custom box' : 'Use the best-fit box';
+  ui.fitError.hidden = false;
   layerView.setData(null, [1, 1]);
   ui.slider.disabled = true;
   ui.readout.textContent = '—';
@@ -837,8 +831,8 @@ function renderReport(): void {
   const warnings = [...r.warnings, ...layerWarnings()];
   const play = r.playUp + r.playDown;
   const minC = ship.settings().minCushion;
-  const weak =
-    r.sideWall < minC - 0.05 || r.bottomCushion < minC - 0.05 || r.topCushion < minC - 0.05;
+  // Open base/top are the user's choice; only thin side walls count as weak.
+  const weak = r.sideWall < minC - 0.05;
   const state =
     warnings.length === 0
       ? 'good'
@@ -1296,3 +1290,97 @@ for (const r of document.querySelectorAll<HTMLInputElement>('input[name="units"]
     if (mode === 'ship') onShipInput('units');
   });
 }
+
+// ---------------------------------------------------------------------------
+// Auto orientation and best-fit box (resolved before every re-plan)
+
+function allowedOrientations(): { axis: StackAxis; turn90: boolean }[] {
+  if (ship.orientMode() === 'auto') return ORIENTATIONS;
+  const o = ship.orientation();
+  return [{ axis: o.axis, turn90: o.turn90 }];
+}
+
+function resolveAuto(): void {
+  if (!model) return;
+  const size = ship.scaledSize();
+  const s = ship.settings();
+  const oris = allowedOrientations();
+  const auto = ship.orientMode() === 'auto';
+  const need = shellNeed();
+  const upName = (o: { axis: StackAxis; turn90: boolean }) =>
+    `${o.axis.toUpperCase()} up${o.turn90 ? ', turned 90°' : ''}`;
+  if (ship.boxMode() === 'auto') {
+    const exact = () =>
+      exactBox(
+        size,
+        {
+          cushion: s.minCushion,
+          clearance: s.clearance,
+          base: need.below,
+          top: need.above,
+          thinnest: Math.min(...s.thicknesses),
+          preload: s.preload,
+          round: ship.units === 'in' ? 6.35 : 5,
+        },
+        oris,
+      );
+    let r: { box: [number, number, number]; axis: StackAxis; turn90: boolean } | null;
+    let note: string;
+    if (ship.boxSource() === 'exact') {
+      r = exact();
+      note = 'Exact custom size';
+    } else {
+      r = smallestBox(size, s.minCushion, s.clearance, ship.searchBoxes(), need, oris);
+      const saved = r && ship.savedBoxName(r.box);
+      note = r ? (saved ? `Your box “${saved}”` : 'Smallest standard box') : '';
+      if (!r) {
+        r = exact();
+        note = 'No box in the list is big enough — using an exact custom size';
+      }
+    }
+    ship.setBox(r.box);
+    if (auto) ship.setOrientation(r.axis, r.turn90);
+    ui.boxHint.textContent = `${note} for ${upName(r)}.`;
+  } else {
+    ui.boxHint.textContent = '';
+    if (auto) {
+      const best = rankOrientations(size, s)[0];
+      ship.setOrientation(best.axis, best.turn90);
+    }
+  }
+  const o = ship.orientation();
+  ui.orientHint.textContent = auto
+    ? `Auto: ${upName(o)} — ${ship.boxMode() === 'auto' ? 'needs the smallest box' : 'fits this box best'}.`
+    : `Locked: ${upName(o)}${o.flip ? ', upside down' : ''}. Box suggestions keep this orientation.`;
+  syncShipModes();
+}
+
+/** Show/hide the manual-only controls for orientation and box. */
+function syncShipModes(): void {
+  const manualOri = ship.orientMode() === 'manual';
+  $('orientManual').hidden = !manualOri;
+  const manualBox = ship.boxMode() === 'manual';
+  $('boxManualUi').hidden = !manualBox;
+  $('boxMeasureRow').hidden = !manualBox;
+  $('boxSourceField').hidden = manualBox;
+  ui.smallestBoxBtn.hidden = !manualBox;
+  for (const n of ['boxL', 'boxW', 'boxH']) {
+    (form.form.elements.namedItem(n) as HTMLInputElement).readOnly = !manualBox;
+  }
+  if (
+    !manualBox &&
+    (form.form.elements.namedItem('boxMeasure') as HTMLSelectElement).value !== 'inside'
+  ) {
+    (form.form.elements.namedItem('boxMeasure') as HTMLSelectElement).value = 'inside';
+    syncBoxUi();
+  }
+}
+
+ui.fitErrorBtn.addEventListener('click', () => {
+  if (ship.boxMode() === 'auto') ship.setBoxSource('exact');
+  else ship.setBoxMode('auto');
+  showStep('box');
+  reframeNext = true;
+  computeInsert();
+});
+syncShipModes();
