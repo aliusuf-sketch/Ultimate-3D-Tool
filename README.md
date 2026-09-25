@@ -23,7 +23,22 @@ Everything runs in your browser. Files are never uploaded, and there is no backe
   - A 3D stack view with orbit controls; the selected layer is highlighted.
   - A 2D layer pattern view showing the current layer, the layer below as a dashed outline, pins, the label, dimensions, and open contours (mesh gaps) in yellow.
 
-## How to use
+## Shipping insert mode
+
+Switch to **Shipping insert** in the top bar to make laser-cut foam packaging that holds a 3D print securely in a box.
+
+1. Load the STL of the item (or **Load sample** for a vase).
+2. Enter the box's **inside** dimensions (inches or mm), pick a standard size, or click **Smallest box that fits**.
+3. Tick the foam thicknesses you can buy (½, 1, 2, 3 in by default) and their price per sheet.
+4. The planner then:
+   - chooses the sheets and their order so the stack fills the box height, with the item resting on a layer and its top as close as possible under the next layer;
+   - picks the orientation with the most foam and the least vertical play (or set it yourself);
+   - cuts each layer's cavity with a clearance gap. In **Base + lid** style the stack splits at the best parting layer and the cavities have no undercuts, so a rigid print drops into the base and the lid closes over it. **Follow the shape** cuts each layer to the item's own outline, for soft foam;
+   - adds finger notches so the item can be lifted out, and drops tiny loose foam bits.
+5. The **protection report** shows foam on each side, above and below, how far the item can still move vertically, and anything to fix. The corner card shows the cost per foam thickness.
+6. **Download ZIP**: one DXF/SVG per layer (named like `L02_base_2in`), sheets nested per thickness (`sheets/2in/…`), `cut_list.csv`, and a README with the stack order and gluing steps.
+
+## How to use (model slicer)
 
 1. Click **Open STL** (or drop a file on the viewport), or click **Load sample**.
 2. Pick the stack direction and the X / Y / Z size in mm, then set the sheet thickness to match your foam.

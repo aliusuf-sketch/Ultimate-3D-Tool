@@ -11,6 +11,10 @@ export interface PackedLayers {
   openCoords: Float64Array;
   openOffsets: Uint32Array;
   layerOpen: Uint32Array;
+  /** Optional reference outlines (e.g. the item inside an insert layer). */
+  ghostCoords: Float64Array;
+  ghostOffsets: Uint32Array;
+  layerGhost: Uint32Array;
 }
 
 function packChains(chains: Float64Array[][]): [Float64Array, Uint32Array, Uint32Array] {
@@ -39,7 +43,7 @@ function packChains(chains: Float64Array[][]): [Float64Array, Uint32Array, Uint3
   return [coords, offsets, layerIdx];
 }
 
-export function packLayers(layers: SlicedLayer[]): PackedLayers {
+export function packLayers(layers: SlicedLayer[], ghosts?: Float64Array[][]): PackedLayers {
   const z = new Float64Array(layers.length * 2);
   layers.forEach((l, i) => {
     z[i * 2] = l.z0;
@@ -50,6 +54,7 @@ export function packLayers(layers: SlicedLayer[]): PackedLayers {
   );
   const loopDepth = Int32Array.from(layers.flatMap((l) => l.loops.map((x) => x.depth)));
   const [openCoords, openOffsets, layerOpen] = packChains(layers.map((l) => l.open));
+  const [ghostCoords, ghostOffsets, layerGhost] = packChains(ghosts ?? layers.map(() => []));
   return {
     n: layers.length,
     z,
@@ -60,6 +65,9 @@ export function packLayers(layers: SlicedLayer[]): PackedLayers {
     openCoords,
     openOffsets,
     layerOpen,
+    ghostCoords,
+    ghostOffsets,
+    layerGhost,
   };
 }
 
@@ -73,6 +81,9 @@ export function packedTransferables(p: PackedLayers): ArrayBuffer[] {
     p.openCoords,
     p.openOffsets,
     p.layerOpen,
+    p.ghostCoords,
+    p.ghostOffsets,
+    p.layerGhost,
   ].map((a) => a.buffer as ArrayBuffer);
 }
 
@@ -125,4 +136,12 @@ export function packExtras(extras: LayerExtras[]): PackedExtras {
 
 export function extrasTransferables(e: PackedExtras): ArrayBuffer[] {
   return [e.pins, e.layerPins, e.labels, e.missing].map((a) => a.buffer as ArrayBuffer);
+}
+
+export function layerGhosts(p: PackedLayers, L: number): Float64Array[] {
+  const out = [];
+  for (let k = p.layerGhost[L]; k < p.layerGhost[L + 1]; k++) {
+    out.push(p.ghostCoords.subarray(p.ghostOffsets[k], p.ghostOffsets[k + 1]));
+  }
+  return out;
 }

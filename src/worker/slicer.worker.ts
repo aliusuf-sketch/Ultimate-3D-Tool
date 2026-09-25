@@ -14,7 +14,16 @@ import { buildParts, nestParts } from '../core/nest';
 import { extrasTransferables, packedTransferables, packExtras, packLayers } from '../core/pack';
 import { sliceModelIter } from '../core/pipeline';
 import { buildPreview, previewTolerance } from '../core/preview';
-import { makeTorus } from '../core/sample';
+import { makeTorus, makeVase } from '../core/sample';
+import { buildInsertIter, type InsertResult, type InsertSettings } from '../core/insert';
+import {
+  buildInsertFiles,
+  insertLabelText,
+  insertLayerFileBase,
+  insertLayerSVG,
+  type InsertExportInput,
+  type ThicknessGroup,
+} from '../core/export/insertZip';
 import { parseSTL } from '../core/stl';
 import { computeBBox, transformMesh } from '../core/transform';
 import type {
@@ -26,7 +35,7 @@ import type {
   SliceSettings,
   SlicedLayer,
 } from '../types';
-import type { FromWorker, ToWorker } from './protocol';
+import type { FromWorker, InsertExtrasSettings, ToWorker } from './protocol';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const post = (m: FromWorker, transfer: Transferable[] = []) => ctx.postMessage(m, transfer);
@@ -50,6 +59,19 @@ let sliced: {
   settings: SliceSettings;
   size: [number, number, number];
   layers: SlicedLayer[];
+} | null = null;
+
+// Shipping-insert mode.
+let activeMode: 'slicer' | 'ship' = 'slicer';
+const insertWant = {
+  job: -1,
+  settings: null as InsertSettings | null,
+  extras: null as InsertExtrasSettings | null,
+};
+let insertDone: {
+  job: number;
+  sourceVersion: number;
+  data: InsertExportInput | null; // null when the job failed
 } | null = null;
 
 let extrasDone: {
@@ -164,13 +186,137 @@ async function doExtras(): Promise<void> {
   );
 }
 
+async function doInsert(): Promise<void> {
+  const job = insertWant.job;
+  const settings = insertWant.settings!;
+  const ex = insertWant.extras!;
+  const src = source!;
+  const version = sourceVersion;
+  const stillWanted = () =>
+    insertWant.job === job && sourceVersion === version && activeMode === 'ship';
+  const t0 = performance.now();
+  let result: InsertResult;
+  try {
+    result = await drive(buildInsertIter(src.mesh, settings), 'Planning insert', stillWanted);
+  } catch (e) {
+    if (e instanceof Cancelled) throw e;
+    insertDone = { job, sourceVersion: version, data: null };
+    post({ type: 'insertError', job, message: e instanceof Error ? e.message : String(e) });
+    return;
+  }
+  post({ type: 'progress', stage: 'Labels and nesting', f: 1 });
+  const { extras } = computeExtras(
+    result.layers,
+    result.rect[0],
+    result.rect[1],
+    {
+      pinMode: 'none',
+      pinDiameter: 0,
+      pinSpacing: 0,
+      pinOffsetX: 0,
+      pinOffsetY: 0,
+      labels: ex.labels,
+      labelHeight: ex.labelHeight,
+      sheetW: ex.sheetW,
+      sheetH: ex.sheetH,
+      gap: ex.gap,
+    },
+    (i) => insertLabelText(result.roles[i], i),
+  );
+  // Nest each foam thickness separately.
+  const groups: ThicknessGroup[] = [];
+  for (const t of [...new Set(result.thickness.map((v) => Math.round(v * 100) / 100))].sort(
+    (a, b) => a - b,
+  )) {
+    const idx = result.thickness.flatMap((v, i) => (Math.abs(v - t) < 0.01 ? [i] : []));
+    const parts = buildParts(
+      idx.map((i) => result.layers[i]),
+      extras,
+    );
+    const nest = nestParts(parts, ex.sheetW, ex.sheetH, ex.gap);
+    groups.push({ thickness: t, layers: idx, parts, nest, partArea: partsArea(parts, signedArea) });
+  }
+  const data: InsertExportInput = {
+    sourceName: src.name,
+    result,
+    extras,
+    groups,
+    sheetW: ex.sheetW,
+    sheetH: ex.sheetH,
+  };
+  insertDone = { job, sourceVersion: version, data };
+  const preview = buildPreview(
+    result.layers,
+    previewTolerance(0.1, result.rect[0], result.rect[1]),
+  );
+  const layers = packLayers(result.layers, result.ghosts);
+  const packedExtras = packExtras(extras);
+  const item = result.item.slice();
+  post(
+    {
+      type: 'inserted',
+      job,
+      summary: {
+        rect: result.rect,
+        stackHeight: result.stackHeight,
+        thickness: result.thickness,
+        roles: result.roles,
+        baseCount: result.baseCount,
+        itemSize: result.itemSize,
+        itemOffset: result.itemOffset,
+        report: result.report,
+        groups: groups.map((g) => ({
+          thickness: g.thickness,
+          layerCount: g.layers.length,
+          sheets: g.nest.sheets,
+          partArea: g.partArea,
+        })),
+        sheetW: ex.sheetW,
+        sheetH: ex.sheetH,
+        ms: performance.now() - t0,
+      },
+      layers,
+      preview,
+      extras: packedExtras,
+      item,
+    },
+    [
+      ...packedTransferables(layers),
+      ...extrasTransferables(packedExtras),
+      preview.positions.buffer,
+      preview.normals.buffer,
+      preview.colors.buffer,
+      preview.layerStart.buffer,
+      item.buffer,
+    ],
+  );
+}
+
 let pumping = false;
 async function pump(): Promise<void> {
   if (pumping) return;
   pumping = true;
   try {
     for (;;) {
-      if (!source || !want.slice || !want.extras) break;
+      if (!source) break;
+      if (activeMode === 'ship') {
+        if (!insertWant.settings || !insertWant.extras) break;
+        try {
+          if (
+            !insertDone ||
+            insertDone.job !== insertWant.job ||
+            insertDone.sourceVersion !== sourceVersion
+          ) {
+            await doInsert();
+            continue;
+          }
+        } catch (e) {
+          if (e instanceof Cancelled) continue;
+          throw e;
+        }
+        break;
+      }
+      if (!want.slice || !want.extras) break;
       try {
         if (
           !sliced ||
@@ -201,6 +347,8 @@ function setSource(mesh: Mesh, name: string, job: number) {
   source = { mesh, name };
   sourceVersion++;
   want.slice = null; // wait for the next compute request with settings for this model
+  insertWant.settings = null;
+  insertDone = null;
   sliced = null;
   extrasDone = null;
   const bb = computeBBox(mesh.positions);
@@ -235,10 +383,27 @@ ctx.onmessage = async (ev: MessageEvent<ToWorker>) => {
         void pump();
         break;
       case 'loadSample':
-        setSource(makeTorus(), 'sample-torus.stl', m.job);
+        if (m.kind === 'vase') setSource(makeVase(), 'sample-vase.stl', m.job);
+        else setSource(makeTorus(), 'sample-torus.stl', m.job);
         void pump();
         break;
+      case 'insert':
+        activeMode = 'ship';
+        insertWant.job = m.job;
+        insertWant.settings = m.settings;
+        insertWant.extras = m.extras;
+        void pump();
+        break;
+      case 'exportInsert': {
+        const data = insertDone?.data;
+        if (!data) throw new Error('Nothing to export yet');
+        const files = buildInsertFiles(data, m.opts);
+        const zip = await buildZip(files);
+        post({ type: 'exported', job: m.job, zip, fileCount: files.length }, [zip.buffer]);
+        break;
+      }
       case 'compute':
+        activeMode = 'slicer';
         want.sliceJob = m.sliceJob;
         want.slice = m.slice;
         want.extrasJob = m.extrasJob;
@@ -255,6 +420,17 @@ ctx.onmessage = async (ev: MessageEvent<ToWorker>) => {
         break;
       }
       case 'layerSvg': {
+        if (activeMode === 'ship') {
+          const data = insertDone?.data;
+          if (!data || !data.result.layers[m.layer]) throw new Error('Nothing to export yet');
+          post({
+            type: 'layerSvg',
+            job: m.job,
+            name: `${insertLayerFileBase(data.result, m.layer)}.svg`,
+            svg: insertLayerSVG(data, m.layer),
+          });
+          break;
+        }
         const input = exportInput();
         const layer = input.layers[m.layer];
         if (!layer) throw new Error('No such layer');

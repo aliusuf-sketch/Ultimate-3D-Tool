@@ -1,10 +1,12 @@
 import type { PackedExtras, PackedLayers } from '../core/pack';
 import type { PreviewGeometry } from '../core/preview';
+import type { InsertReport, InsertSettings, LayerRole } from '../core/insert';
+import type { InsertExportOptions } from '../core/export/insertZip';
 import type { SheetInfo, ExportOptions, ExtrasSettings, SliceSettings } from '../types';
 
 export type ToWorker =
   | { type: 'load'; job: number; buffer: ArrayBuffer; name: string }
-  | { type: 'loadSample'; job: number }
+  | { type: 'loadSample'; job: number; kind: 'torus' | 'vase' }
   | {
       type: 'compute';
       sliceJob: number;
@@ -12,8 +14,40 @@ export type ToWorker =
       extrasJob: number;
       extras: ExtrasSettings;
     }
+  | { type: 'insert'; job: number; settings: InsertSettings; extras: InsertExtrasSettings }
   | { type: 'export'; job: number; opts: ExportOptions }
+  | { type: 'exportInsert'; job: number; opts: InsertExportOptions }
   | { type: 'layerSvg'; job: number; layer: number };
+
+export interface InsertExtrasSettings {
+  labels: boolean;
+  labelHeight: number;
+  sheetW: number;
+  sheetH: number;
+  gap: number;
+}
+
+export interface InsertGroupSummary {
+  thickness: number;
+  layerCount: number;
+  sheets: SheetInfo[];
+  partArea: number;
+}
+
+export interface InsertSummary {
+  rect: [number, number];
+  stackHeight: number;
+  thickness: number[];
+  roles: LayerRole[];
+  baseCount: number;
+  itemSize: [number, number, number];
+  itemOffset: [number, number, number];
+  report: InsertReport;
+  groups: InsertGroupSummary[];
+  sheetW: number;
+  sheetH: number;
+  ms: number;
+}
 
 export interface SliceSummary {
   size: [number, number, number];
@@ -54,6 +88,16 @@ export type FromWorker =
       summary: ExtrasSummary;
       extras: PackedExtras;
     }
+  | {
+      type: 'inserted';
+      job: number;
+      summary: InsertSummary;
+      layers: PackedLayers;
+      preview: PreviewGeometry;
+      extras: PackedExtras;
+      item: Float32Array;
+    }
+  | { type: 'insertError'; job: number; message: string }
   | { type: 'exported'; job: number; zip: Uint8Array; fileCount: number }
   | { type: 'layerSvg'; job: number; name: string; svg: string }
   | { type: 'error'; job?: number; message: string };

@@ -1,5 +1,9 @@
 /** three.js stack view: one merged mesh + selected-layer overlay, rendered on demand. */
 import {
+  BoxGeometry,
+  EdgesGeometry,
+  LineBasicMaterial,
+  LineSegments,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -24,6 +28,17 @@ export class StackView {
   private group = new Group();
   private stack: Mesh | null = null;
   private overlay: Mesh | null = null;
+  private lid: Mesh | null = null;
+  private lidGroup = new Group();
+  private itemMesh: Mesh | null = null;
+  private boxLines: LineSegments | null = null;
+  private splitLayer = -1;
+  private explode = 0;
+  private itemMat = new MeshLambertMaterial({
+    color: new Color('#8fb3d9'),
+    emissive: new Color('#0d1c2b'),
+  });
+  private boxMat = new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
   private preview: PreviewGeometry | null = null;
   private stackMat = new MeshLambertMaterial({ vertexColors: true });
   private overlayMat = new MeshLambertMaterial({
@@ -56,6 +71,7 @@ export class StackView {
     fill.position.set(-1, 0.7, -0.4);
     this.scene.add(fill);
     this.scene.add(this.group);
+    this.group.add(this.lidGroup);
     new ResizeObserver(() => this.requestRender()).observe(canvas.parentElement ?? canvas);
   }
 
@@ -65,16 +81,64 @@ export class StackView {
   }
 
   /** Replace the stack geometry. `reframe` re-fits the camera (new model / axis). */
-  setPreview(p: PreviewGeometry, size: [number, number, number], reframe: boolean): void {
+  /**
+   * Replace the stack geometry. `reframe` re-fits the camera (new model / axis).
+   * Insert mode passes `splitLayer` (first lid layer, drawn in an explodable group),
+   * the item triangles and the box (min corner + inner size) in layer coordinates.
+   */
+  setPreview(
+    p: PreviewGeometry,
+    size: [number, number, number],
+    reframe: boolean,
+    opts: {
+      splitLayer?: number;
+      item?: Float32Array;
+      box?: { min: [number, number]; size: [number, number, number] };
+    } = {},
+  ): void {
     this.disposeMeshes();
     this.preview = p;
+    const pos = new BufferAttribute(p.positions, 3);
+    const nor = new BufferAttribute(p.normals, 3);
+    const col = new BufferAttribute(p.colors, 3);
     const g = new BufferGeometry();
-    g.setAttribute('position', new BufferAttribute(p.positions, 3));
-    g.setAttribute('normal', new BufferAttribute(p.normals, 3));
-    g.setAttribute('color', new BufferAttribute(p.colors, 3));
+    g.setAttribute('position', pos);
+    g.setAttribute('normal', nor);
+    g.setAttribute('color', col);
     g.computeBoundingSphere();
     this.stack = new Mesh(g, this.stackMat);
     this.group.add(this.stack);
+    const nLayers = p.layerStart.length - 1;
+    this.splitLayer =
+      opts.splitLayer !== undefined && opts.splitLayer < nLayers ? opts.splitLayer : -1;
+    if (this.splitLayer >= 0) {
+      const at = p.layerStart[this.splitLayer];
+      const end = p.layerStart[nLayers];
+      g.setDrawRange(0, at);
+      const lg = new BufferGeometry();
+      lg.setAttribute('position', pos);
+      lg.setAttribute('normal', nor);
+      lg.setAttribute('color', col);
+      lg.setDrawRange(at, end - at);
+      lg.computeBoundingSphere();
+      this.lid = new Mesh(lg, this.stackMat);
+      this.lidGroup.add(this.lid);
+    }
+    this.lidGroup.position.z = this.splitLayer >= 0 ? this.explode : 0;
+    if (opts.item) {
+      const ig = new BufferGeometry();
+      ig.setAttribute('position', new BufferAttribute(opts.item, 3));
+      ig.computeVertexNormals();
+      this.itemMesh = new Mesh(ig, this.itemMat);
+      this.group.add(this.itemMesh);
+    }
+    if (opts.box) {
+      const [L, W, H] = opts.box.size;
+      const eg = new EdgesGeometry(new BoxGeometry(L, W, H));
+      this.boxLines = new LineSegments(eg, this.boxMat);
+      this.boxLines.position.set(opts.box.min[0] + L / 2, opts.box.min[1] + W / 2, H / 2);
+      this.group.add(this.boxLines);
+    }
     this.group.position.set(-size[0] / 2, -size[1] / 2, 0);
     if (reframe) this.frameModel(size);
     const sel = this.selected;
@@ -86,7 +150,7 @@ export class StackView {
     if (L === this.selected || !this.preview) return;
     this.selected = L;
     if (this.overlay) {
-      this.group.remove(this.overlay);
+      this.overlay.removeFromParent();
       this.overlay.geometry.dispose();
       this.overlay = null;
     }
@@ -99,7 +163,7 @@ export class StackView {
       g.setAttribute('normal', new BufferAttribute(p.normals.slice(a * 3, b * 3), 3));
       this.overlay = new Mesh(g, this.overlayMat);
       this.overlay.renderOrder = 1;
-      this.group.add(this.overlay);
+      (this.splitLayer >= 0 && L >= this.splitLayer ? this.lidGroup : this.group).add(this.overlay);
     }
     this.requestRender();
   }
@@ -111,14 +175,35 @@ export class StackView {
     this.requestRender();
   }
 
+  /** Lift the lid layers (insert mode) by `mm`. */
+  setExplode(mm: number): void {
+    this.explode = mm;
+    this.lidGroup.position.z = this.splitLayer >= 0 ? mm : 0;
+    this.requestRender();
+  }
+
+  /** See-through foam so the item inside is visible. */
+  setXray(on: boolean): void {
+    this.stackMat.transparent = on;
+    this.stackMat.opacity = on ? 0.35 : 1;
+    this.stackMat.depthWrite = !on;
+    this.stackMat.needsUpdate = true;
+    if (this.itemMesh) this.itemMesh.renderOrder = on ? -1 : 0;
+    this.requestRender();
+  }
+
   private disposeMeshes(): void {
-    for (const m of [this.stack, this.overlay]) {
+    for (const m of [this.stack, this.overlay, this.lid, this.itemMesh, this.boxLines]) {
       if (!m) continue;
-      this.group.remove(m);
+      m.removeFromParent();
       m.geometry.dispose();
     }
     this.stack = null;
     this.overlay = null;
+    this.lid = null;
+    this.itemMesh = null;
+    this.boxLines = null;
+    this.splitLayer = -1;
   }
 
   private frameModel(size: [number, number, number]): void {

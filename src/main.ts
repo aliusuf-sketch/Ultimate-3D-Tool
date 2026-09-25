@@ -12,6 +12,10 @@ import { debounce, download, mm } from './ui/format';
 import type { ExtrasSettings, StackAxis } from './types';
 import { orientedSize } from './core/transform';
 import { estimateCost, formatMoney, MM_PER_FT } from './core/cost';
+import { ShipForm, SHIP_FIELDS, PRICE_FIELDS } from './ui/shipForm';
+import { orientedDims, rankOrientations, smallestBox } from './core/insert';
+import { insertLabelText, thicknessLabel } from './core/export/insertZip';
+import type { InsertSummary } from './worker/protocol';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -41,9 +45,22 @@ const ui = {
   costCard: $('costCard'),
   costTotal: $('costTotal'),
   costDetail: $('costDetail'),
+  modeSlicer: $<HTMLButtonElement>('modeSlicer'),
+  modeShip: $<HTMLButtonElement>('modeShip'),
+  emptyTitle: $('emptyTitle'),
+  reportStatus: $('reportStatus'),
+  reportGrid: $('reportGrid'),
+  reportWarn: $('reportWarn'),
+  explode: $<HTMLInputElement>('explode'),
+  xray: $<HTMLInputElement>('xray'),
+  autoOrientBtn: $<HTMLButtonElement>('autoOrientBtn'),
+  smallestBoxBtn: $<HTMLButtonElement>('smallestBoxBtn'),
 };
 
 const form = new SettingsForm($<HTMLFormElement>('settings'));
+const ship = new ShipForm(form);
+ship.fillPresets();
+ship.syncPreset();
 const stackView = new StackView(ui.canvas3d);
 const layerView = new LayerView(ui.canvas2d);
 initTheme(ui.themeBtn);
@@ -72,7 +89,16 @@ let extrasSummary: ExtrasSummary | null = null;
 let current = 0;
 let exporting = false;
 
-const busy = () => model !== null && (gotSlice !== sliceJob || gotExtras !== extrasJob);
+// Shipping-insert mode state.
+let mode: 'slicer' | 'ship' = 'slicer';
+let insertJob = 0;
+let gotInsert = -1;
+let shipSummary: InsertSummary | null = null;
+let shipError: string | null = null;
+
+const busy = () =>
+  model !== null &&
+  (mode === 'ship' ? gotInsert !== insertJob : gotSlice !== sliceJob || gotExtras !== extrasJob);
 
 function setProgress(stage: string | null, f = 0): void {
   if (stage === null) {
@@ -149,6 +175,31 @@ function compute(): void {
 }
 const computeSoon = debounce(compute, 200);
 
+function computeInsert(): void {
+  if (!model) return;
+  const settings = ship.settings();
+  if (!settings.thicknesses.length) {
+    showShipError('Tick at least one foam thickness');
+    return;
+  }
+  insertJob++;
+  send({
+    type: 'insert',
+    job: insertJob,
+    settings,
+    extras: {
+      labels: form.checked('labels'),
+      labelHeight: form.num('labelHeight', 6, 0.5),
+      sheetW: form.extras().sheetW,
+      sheetH: form.extras().sheetH,
+      gap: form.num('gap', 6, 0),
+    },
+  });
+  setProgress('Planning insert', 0);
+  syncButtons();
+}
+const computeInsertSoon = debounce(computeInsert, 200);
+
 // ---- Worker messages ----
 worker.onmessage = (ev: MessageEvent<FromWorker>) => {
   const m = ev.data;
@@ -172,7 +223,8 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       reframeNext = true;
       baseAxis = form.axis();
       setSize([1, 1, 1]);
-      compute();
+      if (mode === 'ship') prepareShip(true);
+      else compute();
       break;
     }
     case 'sliced': {
@@ -207,12 +259,52 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
       syncButtons();
       break;
     }
+    case 'inserted': {
+      if (m.job !== insertJob || mode !== 'ship') return;
+      gotInsert = m.job;
+      shipError = null;
+      layers = m.layers;
+      shipSummary = m.summary;
+      const S = m.summary;
+      const boxMin: [number, number] = [
+        (S.rect[0] - ship.box()[0]) / 2,
+        (S.rect[1] - ship.box()[1]) / 2,
+      ];
+      stackView.setPreview(m.preview, [S.rect[0], S.rect[1], S.stackHeight], reframeNext, {
+        splitLayer: S.roles.includes('base') ? S.baseCount : undefined,
+        item: m.item,
+        box: { min: boxMin, size: ship.box() },
+      });
+      stackView.setExplode(explodeMm());
+      reframeNext = false;
+      layerView.setLabelText((i) => insertLabelText(S.roles[i] ?? 'layer', i));
+      layerView.setData(m.layers, S.rect);
+      layerView.setExtras(m.extras);
+      ui.slider.max = String(Math.max(0, m.layers.n - 1));
+      ui.slider.disabled = m.layers.n === 0;
+      current = Math.min(current, Math.max(0, m.layers.n - 1));
+      ui.slider.value = String(current);
+      selectLayer(current);
+      setProgress(null);
+      renderReport();
+      renderStats();
+      renderCost();
+      syncButtons();
+      break;
+    }
+    case 'insertError': {
+      if (m.job !== insertJob || mode !== 'ship') return;
+      gotInsert = m.job;
+      showShipError(m.message);
+      break;
+    }
     case 'exported': {
       if (m.job !== exportJob) return;
       exporting = false;
       syncButtons();
       const base = (model?.name ?? 'model').replace(/\.stl$/i, '');
-      download(m.zip as Uint8Array<ArrayBuffer>, `${base}_foam_layers.zip`, 'application/zip');
+      const suffix = mode === 'ship' ? 'shipping_insert' : 'foam_layers';
+      download(m.zip as Uint8Array<ArrayBuffer>, `${base}_${suffix}.zip`, 'application/zip');
       toast(`ZIP ready — ${m.fileCount} files`);
       break;
     }
@@ -236,6 +328,7 @@ worker.onerror = (e) => {
 
 // ---- Stats & readout ----
 function renderStats(): void {
+  if (mode === 'ship') return renderShipStats();
   const s = sliceSummary;
   if (!s || !layers) {
     ui.stats.textContent = 'Load a model to begin.';
@@ -275,7 +368,14 @@ function selectLayer(L: number): void {
   }
   const z0 = layers.z[L * 2],
     z1 = layers.z[L * 2 + 1];
-  ui.readout.textContent = `${layerName(L)} · z ${mm(z0)}–${mm(z1)} mm`;
+  if (mode === 'ship' && shipSummary) {
+    const role = shipSummary.roles[L];
+    ui.readout.textContent =
+      `${layerName(L)} · ${role === 'layer' ? '' : `${role} · `}` +
+      `${thicknessLabel(shipSummary.thickness[L]).replace('in', ' in')} · z ${mm(z0)}–${mm(z1)} mm`;
+  } else {
+    ui.readout.textContent = `${layerName(L)} · z ${mm(z0)}–${mm(z1)} mm`;
+  }
   stackView.setSelected(L);
   layerView.setLayer(L);
 }
@@ -285,6 +385,7 @@ ui.slider.addEventListener('input', () => selectLayer(+ui.slider.value));
 // ---- Settings ----
 form.form.addEventListener('input', (ev) => {
   const name = (ev.target as HTMLInputElement).name;
+  if (mode === 'ship') return onShipInput(name);
   if (name === 'sizeX' || name === 'sizeY' || name === 'sizeZ') {
     const i = name === 'sizeX' ? 0 : name === 'sizeY' ? 1 : 2;
     const k = factors()[i];
@@ -318,6 +419,7 @@ ui.resetSizeBtn.addEventListener('click', () => {
 
 // ---- Material cost (updates live, no worker round-trip) ----
 function renderCost(): void {
+  if (mode === 'ship') return renderShipCost();
   const e = extrasSummary;
   const x = costExtras;
   if (!e || !x || !layers || layers.n === 0) {
@@ -382,7 +484,7 @@ ui.fileInput.addEventListener('change', () => {
 for (const b of ui.sampleBtns) {
   b.addEventListener('click', () => {
     loadJob++;
-    send({ type: 'loadSample', job: loadJob });
+    send({ type: 'loadSample', job: loadJob, kind: mode === 'ship' ? 'vase' : 'torus' });
   });
 }
 
@@ -414,7 +516,20 @@ ui.exportBtn.addEventListener('click', () => {
     return toast('Pick per-layer files and/or nested sheets', 'error');
   exporting = true;
   syncButtons();
-  send({ type: 'export', job: ++exportJob, opts });
+  if (mode === 'ship') {
+    const b = ship.box();
+    send({
+      type: 'exportInsert',
+      job: ++exportJob,
+      opts: {
+        ...opts,
+        prices: ship.foam().map((r) => ({ thickness: r.thickness, price: r.price })),
+        boxLabel: `${b.map((v) => ship.fmtLen(v, 2).split(' ')[0]).join(' x ')} ${ship.units}`,
+      },
+    });
+  } else {
+    send({ type: 'export', job: ++exportJob, opts });
+  }
 });
 ui.layerSvgBtn.addEventListener('click', () => {
   send({ type: 'layerSvg', job: ++svgJob, layer: current });
@@ -422,5 +537,314 @@ ui.layerSvgBtn.addEventListener('click', () => {
 
 // Expose a tiny hook for automated smoke tests.
 (window as unknown as { __foam: unknown }).__foam = {
-  state: () => ({ layers: layers?.n ?? 0, current, busy: busy(), sliceSummary, extrasSummary }),
+  state: () => ({
+    mode,
+    layers: layers?.n ?? 0,
+    current,
+    busy: busy(),
+    sliceSummary,
+    extrasSummary,
+    shipSummary,
+    shipError,
+  }),
 };
+
+// ---------------------------------------------------------------------------
+// Shipping-insert mode
+
+function explodeMm(): number {
+  const H = shipSummary?.stackHeight ?? 0;
+  return (+ui.explode.value / 100) * H * 0.9;
+}
+ui.explode.addEventListener('input', () => stackView.setExplode(explodeMm()));
+ui.xray.addEventListener('change', () => stackView.setXray(ui.xray.checked));
+
+function setMode(next: 'slicer' | 'ship'): void {
+  if (next === mode) return;
+  mode = next;
+  document.body.classList.toggle('mode-ship', mode === 'ship');
+  ui.modeSlicer.setAttribute('aria-selected', String(mode === 'slicer'));
+  ui.modeShip.setAttribute('aria-selected', String(mode === 'ship'));
+  ui.modeSlicer.tabIndex = mode === 'slicer' ? 0 : -1;
+  ui.modeShip.tabIndex = mode === 'ship' ? 0 : -1;
+  ui.emptyTitle.textContent =
+    mode === 'ship' ? 'Drop the STL of the item you want to ship' : 'Drop an STL file here';
+  ui.explode.value = '0';
+  stackView.setExplode(0);
+  stackView.clear();
+  layerView.setData(null, [1, 1]);
+  layerView.setLabelText(layerName);
+  layers = null;
+  shipSummary = null;
+  shipError = null;
+  sliceSummary = null;
+  extrasSummary = null;
+  ui.costCard.hidden = true;
+  reframeNext = true;
+  if (model) {
+    if (mode === 'ship') prepareShip(false);
+    else {
+      lastSliceKey = '';
+      lastExtrasKey = '';
+      compute();
+    }
+  } else {
+    renderReport();
+  }
+  renderStats();
+  syncButtons();
+}
+ui.modeSlicer.addEventListener('click', () => setMode('slicer'));
+ui.modeShip.addEventListener('click', () => setMode('ship'));
+for (const b of [ui.modeSlicer, ui.modeShip]) {
+  b.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const other = b === ui.modeSlicer ? ui.modeShip : ui.modeSlicer;
+    other.focus();
+    other.click();
+  });
+}
+
+/** On a new item: pick the best orientation for the box, or a box that fits. */
+function prepareShip(newItem: boolean): void {
+  if (!model) return;
+  const s = ship.settings();
+  if (newItem) {
+    const best = rankOrientations(model.size, s)[0];
+    if (best.margin >= s.minCushion) {
+      ship.setOrientation(best.axis, best.turn90);
+    } else {
+      const b = smallestBox(model.size, s.minCushion, s.clearance);
+      if (b) {
+        ship.setBox(b.box);
+        const o = rankOrientations(model.size, ship.settings())[0];
+        ship.setOrientation(o.axis, o.turn90);
+        toast(
+          `Box set to ${b.box.map((v) => ship.fmtLen(v, 2).split(' ')[0]).join(' × ')} ${ship.units} so the item fits with cushion`,
+        );
+      } else {
+        ship.setOrientation(best.axis, best.turn90);
+        toast('No standard box gives the full cushion — enter a custom box size', 'error', 6000);
+      }
+    }
+  }
+  reframeNext = true;
+  computeInsert();
+}
+
+function onShipInput(name: string): void {
+  if (name === 'units') {
+    ship.switchUnits();
+    renderReport();
+    renderShipStats();
+    return;
+  }
+  if (name === 'boxPreset') {
+    if (!ship.applyPreset()) return;
+    reframeNext = true;
+  } else if (name === 'boxL' || name === 'boxW' || name === 'boxH') {
+    ship.syncPreset();
+    reframeNext = true;
+  }
+  if (PRICE_FIELDS.has(name)) return renderShipCost();
+  if (['fmtDxf', 'fmtSvg', 'outLayers', 'outSheets'].includes(name)) return;
+  if (
+    SHIP_FIELDS.has(name) ||
+    ['labels', 'labelHeight', 'sheetWft', 'sheetHft', 'gap'].includes(name)
+  ) {
+    computeInsertSoon();
+  }
+}
+
+ui.autoOrientBtn.addEventListener('click', () => {
+  if (!model) return;
+  const s = ship.settings();
+  const best = rankOrientations(model.size, s)[0];
+  ship.setOrientation(best.axis, best.turn90);
+  const d = orientedDims(model.size, best.axis, best.turn90);
+  toast(
+    `Item sits ${d.map((v) => mm(v)).join(' × ')} mm in the box` +
+      (Number.isFinite(best.gap)
+        ? ` · ${best.gap < 0.05 ? 'no' : `${mm(best.gap)} mm`} vertical gap`
+        : ''),
+  );
+  reframeNext = true;
+  computeInsert();
+});
+
+ui.smallestBoxBtn.addEventListener('click', () => {
+  if (!model) return toast('Load the item first', 'error');
+  const s = ship.settings();
+  const b = smallestBox(model.size, s.minCushion, s.clearance);
+  if (!b) return toast('No standard box is big enough — enter a custom size', 'error');
+  ship.setBox(b.box);
+  const best = rankOrientations(model.size, ship.settings())[0];
+  ship.setOrientation(best.axis, best.turn90);
+  reframeNext = true;
+  computeInsert();
+});
+
+function showShipError(message: string): void {
+  shipError = message;
+  shipSummary = null;
+  layers = null;
+  stackView.clear();
+  layerView.setData(null, [1, 1]);
+  ui.slider.disabled = true;
+  ui.readout.textContent = '—';
+  setProgress(null);
+  renderReport();
+  renderShipStats();
+  renderShipCost();
+  syncButtons();
+}
+
+function renderReport(): void {
+  const grid = ui.reportGrid;
+  const warn = ui.reportWarn;
+  grid.innerHTML = '';
+  warn.innerHTML = '';
+  const st = ui.reportStatus;
+  if (!model) {
+    st.dataset.state = 'idle';
+    st.textContent = 'Load the item you want to ship';
+    return;
+  }
+  if (shipError) {
+    st.dataset.state = 'bad';
+    st.textContent = 'Won’t fit';
+    const li = document.createElement('li');
+    li.textContent = shipError;
+    warn.append(li);
+    return;
+  }
+  const S = shipSummary;
+  if (!S) {
+    st.dataset.state = 'idle';
+    st.textContent = 'Planning…';
+    return;
+  }
+  const r = S.report;
+  const play = r.playUp + r.playDown;
+  const minC = ship.settings().minCushion;
+  const weak =
+    r.sideWall < minC - 0.05 || r.bottomCushion < minC - 0.05 || r.topCushion < minC - 0.05;
+  const state = r.warnings.length === 0 ? 'good' : play > 3 || r.sideWall < 6 ? 'bad' : 'check';
+  st.dataset.state = state;
+  st.textContent =
+    state === 'good'
+      ? 'Secure fit'
+      : state === 'check'
+        ? weak
+          ? 'Fits — thin cushion'
+          : 'Fits — check notes'
+        : 'Item can move';
+  const L = (v: number) => ship.fmtLen(v, 2);
+  const counts = new Map<number, number>();
+  for (const t of S.thickness) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const rows: [string, string][] = [
+    [
+      'Stack',
+      `${S.thickness.length} layers · ${[...counts].map(([t, c]) => `${c} × ${thicknessLabel(t).replace('in', ' in')}`).join(', ')}`,
+    ],
+    ...(S.roles.includes('base')
+      ? ([
+          [
+            'Split',
+            `base L01–${layerName(S.baseCount - 1)} · lid ${layerName(S.baseCount)}–${layerName(S.thickness.length - 1)}`,
+          ],
+        ] as [string, string][])
+      : []),
+    ['Item', S.itemSize.map((v) => mm(v)).join(' × ') + ' mm'],
+    ['Foam sides', L(r.sideWall)],
+    ['Foam below / above', `${L(r.bottomCushion)} / ${L(r.topCushion)}`],
+    [
+      'Vertical play',
+      play < 0.05
+        ? r.preloaded > 0
+          ? `none (presses ${mm(r.preloaded)} mm)`
+          : 'none'
+        : `${mm(play)} mm`,
+    ],
+    [
+      'Stack vs box',
+      Math.abs(r.fillError) < 0.05
+        ? 'exact'
+        : r.fillError > 0
+          ? `${mm(r.fillError)} mm taller (compresses)`
+          : `${mm(-r.fillError)} mm short`,
+    ],
+  ];
+  if (r.islands) rows.push(['Loose inserts', `${r.islands} (glue in place)`]);
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = k;
+    const dd = document.createElement('dd');
+    dd.textContent = v;
+    grid.append(dt, dd);
+  }
+  for (const w of r.warnings) {
+    const li = document.createElement('li');
+    li.textContent = w;
+    warn.append(li);
+  }
+}
+
+function renderShipStats(): void {
+  const S = shipSummary;
+  if (!model) {
+    ui.stats.textContent = 'Load the item you want to ship.';
+    return;
+  }
+  if (!S) {
+    ui.stats.textContent = shipError ? `⚠ ${shipError}` : 'Planning…';
+    return;
+  }
+  const b = ship.box();
+  const sheets = S.groups.reduce((a, g) => a + g.sheets.length, 0);
+  const parts = [
+    `box <b>${b.map((v) => ship.fmtLen(v, 2).split(' ')[0]).join(' × ')} ${ship.units}</b>`,
+    `<b>${S.thickness.length}</b> layers`,
+    `stack <b>${ship.fmtLen(S.stackHeight)}</b>`,
+    `<b>${sheets}</b> foam ${sheets === 1 ? 'sheet' : 'sheets'}`,
+  ];
+  const n = S.report.warnings.length;
+  ui.stats.innerHTML =
+    parts.join(' · ') +
+    (n ? ` · <span class="warn">⚠ ${n} note${n > 1 ? 's' : ''} in the report</span>` : '') +
+    ` <span title="Planning time">(${Math.round(S.ms)} ms)</span>`;
+}
+
+function renderShipCost(): void {
+  const S = shipSummary;
+  if (!S) {
+    ui.costCard.hidden = true;
+    return;
+  }
+  const currency = form.text('currency', '$');
+  const foam = ship.foam();
+  let total = 0;
+  let missingPrice = false;
+  const bits: string[] = [];
+  let used = 0,
+    bought = 0;
+  for (const g of S.groups) {
+    const row = foam.find((r) => Math.abs(r.thickness - g.thickness) < 0.05);
+    const price = row?.price ?? 0;
+    if (!price) missingPrice = true;
+    const c = estimateCost(g.sheets, S.sheetW, S.sheetH, g.partArea, price);
+    total += c.total;
+    used += g.partArea;
+    bought += c.sheets * c.sheetArea;
+    bits.push(
+      `${thicknessLabel(g.thickness).replace('in', '″')}: ${c.sheets} × ${formatMoney(price, currency)}`,
+    );
+  }
+  const ft = (v: number) => mm(v / MM_PER_FT, 2);
+  ui.costCard.hidden = false;
+  ui.costTotal.textContent =
+    missingPrice && total === 0 ? 'Set sheet prices' : formatMoney(total, currency);
+  ui.costDetail.textContent =
+    `${bits.join(' · ')} · sheets ${ft(S.sheetW)} × ${ft(S.sheetH)} ft · ` +
+    `${bought > 0 ? Math.round((used / bought) * 100) : 0} % used`;
+}

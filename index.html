@@ -28,6 +28,12 @@
           </svg>
           <h1>Foam Slicer</h1>
         </div>
+        <div class="mode-switch" role="tablist" aria-label="Tool">
+          <button role="tab" id="modeSlicer" aria-selected="true">Model slicer</button>
+          <button role="tab" id="modeShip" aria-selected="false" tabindex="-1">
+            Shipping insert
+          </button>
+        </div>
         <div class="file-info" id="fileInfo" aria-live="polite">No model loaded</div>
         <div class="top-actions">
           <label class="btn btn-primary" for="fileInput">
@@ -68,13 +74,13 @@
             <canvas id="canvas3d" aria-label="3D stack preview"></canvas>
             <canvas id="canvas2d" aria-label="Layer cut pattern" hidden></canvas>
             <div class="empty" id="emptyState">
-              <p class="empty-title">Drop an STL file here</p>
+              <p class="empty-title" id="emptyTitle">Drop an STL file here</p>
               <p class="empty-sub">
                 Binary or ASCII, units in mm. Nothing is uploaded — everything runs in your browser.
               </p>
               <div class="empty-actions">
                 <label class="btn btn-primary" for="fileInput">Choose file</label>
-                <button class="btn" type="button" id="sampleBtn2">Load sample torus</button>
+                <button class="btn" type="button" id="sampleBtn2">Load sample</button>
               </div>
             </div>
             <div class="drop-hint" id="dropHint" hidden>Drop to load</div>
@@ -89,8 +95,22 @@
             <div class="legend" id="legend2d" hidden>
               <span><i class="sw sw-cut"></i>Cut</span>
               <span><i class="sw sw-below"></i>Layer below</span>
-              <span><i class="sw sw-pin"></i>Pin</span>
-              <span><i class="sw sw-open"></i>Open contour</span>
+              <span data-mode="slicer"><i class="sw sw-pin"></i>Pin</span>
+              <span data-mode="slicer"><i class="sw sw-open"></i>Open contour</span>
+              <span data-mode="ship"><i class="sw sw-item"></i>Item in this layer</span>
+            </div>
+            <div class="view-tools" id="viewTools" data-mode="ship">
+              <label class="tool"
+                ><span>Explode</span>
+                <input
+                  type="range"
+                  id="explode"
+                  min="0"
+                  max="100"
+                  value="0"
+                  aria-label="Lift the lid"
+              /></label>
+              <label class="tool"><input type="checkbox" id="xray" /> X-ray</label>
             </div>
           </div>
 
@@ -112,7 +132,288 @@
 
         <aside class="panel" aria-label="Settings">
           <form id="settings" autocomplete="off" novalidate>
-            <fieldset>
+            <section class="report" data-mode="ship" aria-live="polite">
+              <div class="report-status" id="reportStatus" data-state="idle">
+                Load the item you want to ship
+              </div>
+              <dl class="report-grid" id="reportGrid"></dl>
+              <ul class="report-warn" id="reportWarn"></ul>
+            </section>
+
+            <fieldset data-mode="ship">
+              <legend>Box (inside dimensions)</legend>
+              <div class="field">
+                <span class="label" id="unitsLabel">Units</span>
+                <div class="segmented seg-2" role="radiogroup" aria-labelledby="unitsLabel">
+                  <label
+                    ><input type="radio" name="units" value="in" checked /><span>in</span></label
+                  >
+                  <label><input type="radio" name="units" value="mm" /><span>mm</span></label>
+                </div>
+              </div>
+              <label class="field"
+                ><span class="label">Standard size</span>
+                <select name="boxPreset" id="boxPreset">
+                  <option value="">Custom</option>
+                </select></label
+              >
+              <div class="row row-3">
+                <label class="field"
+                  ><span class="label">Length (<span class="u">in</span>)</span>
+                  <input
+                    type="number"
+                    name="boxL"
+                    value="8"
+                    min="0.1"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Width (<span class="u">in</span>)</span>
+                  <input
+                    type="number"
+                    name="boxW"
+                    value="8"
+                    min="0.1"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Depth (<span class="u">in</span>)</span>
+                  <input
+                    type="number"
+                    name="boxH"
+                    value="8"
+                    min="0.1"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <button class="btn btn-small btn-block" type="button" id="smallestBoxBtn">
+                Smallest box that fits
+              </button>
+            </fieldset>
+
+            <fieldset data-mode="ship">
+              <legend>Item orientation</legend>
+              <div class="field">
+                <span class="label" id="upLabel">Which model axis points up</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="upLabel">
+                  <label
+                    ><input type="radio" name="shipAxis" value="z" checked /><span>Z</span></label
+                  >
+                  <label><input type="radio" name="shipAxis" value="y" /><span>Y</span></label>
+                  <label><input type="radio" name="shipAxis" value="x" /><span>X</span></label>
+                </div>
+              </div>
+              <div class="checks">
+                <label class="check"><input type="checkbox" name="turn90" /> Turn 90°</label>
+                <label class="check"><input type="checkbox" name="flip" /> Upside down</label>
+              </div>
+              <button class="btn btn-small btn-block" type="button" id="autoOrientBtn">
+                Best orientation for this box
+              </button>
+            </fieldset>
+
+            <fieldset data-mode="ship">
+              <legend>Foam sheets</legend>
+              <p class="hint hint-top">Tick the thicknesses you can buy. Price is per sheet.</p>
+              <div class="foam-table" role="group" aria-label="Foam thicknesses">
+                <span class="label">Use</span>
+                <span class="label">Thickness (<span class="u">in</span>)</span>
+                <span class="label">Price / sheet</span>
+                <input type="checkbox" name="foamOn0" checked aria-label="Use sheet 1" />
+                <input
+                  type="number"
+                  name="foamT0"
+                  value="0.5"
+                  min="0.01"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Thickness 1"
+                />
+                <input
+                  type="number"
+                  name="foamP0"
+                  value="10"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Price 1"
+                />
+                <input type="checkbox" name="foamOn1" checked aria-label="Use sheet 2" />
+                <input
+                  type="number"
+                  name="foamT1"
+                  value="1"
+                  min="0.01"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Thickness 2"
+                />
+                <input
+                  type="number"
+                  name="foamP1"
+                  value="15"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Price 2"
+                />
+                <input type="checkbox" name="foamOn2" checked aria-label="Use sheet 3" />
+                <input
+                  type="number"
+                  name="foamT2"
+                  value="2"
+                  min="0.01"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Thickness 3"
+                />
+                <input
+                  type="number"
+                  name="foamP2"
+                  value="25"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Price 3"
+                />
+                <input type="checkbox" name="foamOn3" aria-label="Use sheet 4" />
+                <input
+                  type="number"
+                  name="foamT3"
+                  value="3"
+                  min="0.01"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Thickness 4"
+                />
+                <input
+                  type="number"
+                  name="foamP3"
+                  value="35"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  aria-label="Price 4"
+                />
+              </div>
+              <label class="field"
+                ><span class="label">Layer plan</span>
+                <select name="layering">
+                  <option value="fewest" selected>Fewest layers (less cutting)</option>
+                  <option value="finest">Most layers (closest fit)</option>
+                </select></label
+              >
+            </fieldset>
+
+            <fieldset data-mode="ship">
+              <legend>Fit &amp; protection</legend>
+              <label class="field"
+                ><span class="label">Insert style</span>
+                <select name="insertMode">
+                  <option value="twoPart" selected>Base + lid (item lifts straight out)</option>
+                  <option value="contour">Follow the shape in every layer (soft foam)</option>
+                </select></label
+              >
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Min foam around item (<span class="u">in</span>)</span>
+                  <input
+                    type="number"
+                    name="minCushion"
+                    value="1"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Gap around item (mm)</span>
+                  <input
+                    type="number"
+                    name="clearance"
+                    value="1"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Item may press into foam (mm)</span>
+                  <input
+                    type="number"
+                    name="preload"
+                    value="1.5"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Stack may exceed box by (mm)</span>
+                  <input
+                    type="number"
+                    name="compress"
+                    value="3"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Item height</span>
+                  <select name="placement">
+                    <option value="auto" selected>Snug (least play)</option>
+                    <option value="center">Centred</option>
+                  </select></label
+                >
+                <label class="field"
+                  ><span class="label">Base layers (0 = auto)</span>
+                  <input
+                    type="number"
+                    name="parting"
+                    value="0"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="check check-field"
+                  ><input type="checkbox" name="notches" checked /> Finger notches</label
+                >
+                <label class="field"
+                  ><span class="label">Notch diameter (mm)</span>
+                  <input
+                    type="number"
+                    name="notchDiameter"
+                    value="25"
+                    min="5"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Outline oversize (mm/side)</span>
+                  <input type="number" name="fitOversize" value="0" step="any" inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Drop foam bits under (cm²)</span>
+                  <input
+                    type="number"
+                    name="minIsland"
+                    value="4"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+            </fieldset>
+
+            <fieldset data-mode="slicer">
               <legend>Model</legend>
               <div class="field">
                 <span class="label" id="axisLabel">Stack direction</span>
@@ -150,7 +451,7 @@
               <p class="hint" id="scaleHint">Scale 100 %</p>
             </fieldset>
 
-            <fieldset>
+            <fieldset data-mode="slicer">
               <legend>Layers</legend>
               <div class="row">
                 <label class="field"
@@ -176,7 +477,7 @@
               </div>
             </fieldset>
 
-            <fieldset>
+            <fieldset data-mode="slicer">
               <legend>Alignment pins</legend>
               <label class="field"
                 ><span class="label">Pins</span>
@@ -267,7 +568,7 @@
                 /></label>
               </div>
               <div class="row">
-                <label class="field"
+                <label class="field" data-mode="slicer"
                   ><span class="label">Price per sheet</span>
                   <input
                     type="number"

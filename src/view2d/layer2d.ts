@@ -1,5 +1,11 @@
 /** 2D canvas inspector for one layer's cut pattern. Draws on demand. */
-import { layerLoops, layerOpenChains, type PackedExtras, type PackedLayers } from '../core/pack';
+import {
+  layerGhosts,
+  layerLoops,
+  layerOpenChains,
+  type PackedExtras,
+  type PackedLayers,
+} from '../core/pack';
 import { layerName } from '../core/extras';
 
 export class LayerView {
@@ -10,6 +16,7 @@ export class LayerView {
   private footprint: [number, number] = [1, 1];
   private layer = 0;
   private visible = false;
+  private labelText: (i: number) => string = layerName;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -30,6 +37,11 @@ export class LayerView {
 
   setExtras(extras: PackedExtras | null): void {
     this.extras = extras;
+    this.requestRender();
+  }
+
+  setLabelText(fn: (i: number) => string): void {
+    this.labelText = fn;
     this.requestRender();
   }
 
@@ -106,6 +118,20 @@ export class LayerView {
     ctx.strokeStyle = '#ff3b3b';
     ctx.stroke(path);
 
+    // Reference outline of the item inside this layer (shipping inserts).
+    const ghosts = layerGhosts(P, L);
+    if (ghosts.length) {
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = '#9fd0ff';
+      ctx.fillStyle = 'rgba(143, 179, 217, 0.25)';
+      const gp = pathOf(ghosts);
+      ctx.fill(gp, 'evenodd');
+      ctx.stroke(gp);
+      ctx.restore();
+    }
+
     // Open contours (mesh gaps).
     const open = layerOpenChains(P, L);
     if (open.length) {
@@ -144,7 +170,7 @@ export class LayerView {
         ctx.font = `600 ${Math.max(h * s, 8)}px Barlow, system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(layerName(L), X(E.labels[L * 3]), Y(E.labels[L * 3 + 1]));
+        ctx.fillText(this.labelText(L), X(E.labels[L * 3]), Y(E.labels[L * 3 + 1]));
       }
     }
 

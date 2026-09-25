@@ -35,10 +35,14 @@ function textRadiusFactor(text: string): number {
 
 export const MIN_LABEL_HEIGHT = 1.5;
 
-export function placeLabel(layer: SlicedLayer, pins: Pin[], s: ExtrasSettings): Label | null {
+export function placeLabel(
+  layer: SlicedLayer,
+  pins: Pin[],
+  s: ExtrasSettings,
+  text = layerName(layer.index),
+): Label | null {
   const main = layer.loops.find((l) => l.depth === 0);
   if (!main) return null;
-  const text = layerName(layer.index);
   const [x0, y0, x1, y1] = main.bbox;
   const G = 11;
   let best: { x: number; y: number; c: number } | null = null;
@@ -65,6 +69,7 @@ export function computeExtras(
   footW: number,
   footD: number,
   s: ExtrasSettings,
+  labelText?: (index: number) => string,
 ): { extras: LayerExtras[]; pinsMissingLayers: number } {
   const all = pinPositions(footW, footD, s);
   let pinsMissingLayers = 0;
@@ -76,7 +81,9 @@ export function computeExtras(
     );
     const missingPins = all.length - pins.length;
     if (missingPins > 0) pinsMissingLayers++;
-    const label = s.labels ? placeLabel(layer, pins, s) : null;
+    const label = s.labels
+      ? placeLabel(layer, pins, s, labelText ? labelText(layer.index) : undefined)
+      : null;
     return { pins, label, missingPins };
   });
   return { extras, pinsMissingLayers };
