@@ -55,17 +55,35 @@ const P = new Float64Array(2);
  * so the two triangles sharing an edge produce bit-identical points.
  */
 function edgePoint(
-  ax: number, ay: number, az: number,
-  bx: number, by: number, bz: number,
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
   h: number,
 ): void {
   if (ax > bx || (ax === bx && (ay > by || (ay === by && az > bz)))) {
-    let s = ax; ax = bx; bx = s;
-    s = ay; ay = by; by = s;
-    s = az; az = bz; bz = s;
+    let s = ax;
+    ax = bx;
+    bx = s;
+    s = ay;
+    ay = by;
+    by = s;
+    s = az;
+    az = bz;
+    bz = s;
   }
-  if (az === h) { P[0] = ax; P[1] = ay; return; }
-  if (bz === h) { P[0] = bx; P[1] = by; return; }
+  if (az === h) {
+    P[0] = ax;
+    P[1] = ay;
+    return;
+  }
+  if (bz === h) {
+    P[0] = bx;
+    P[1] = by;
+    return;
+  }
   const s = (h - az) / (bz - az);
   P[0] = ax + s * (bx - ax);
   P[1] = ay + s * (by - ay);
@@ -73,25 +91,43 @@ function edgePoint(
 
 /**
  * Slice a normalised mesh (z >= 0). Returns one segment buffer per layer
- * (x1, y1, x2, y2 per segment). `onProgress` gets a 0..1 fraction.
+ * (x1, y1, x2, y2 per segment).
  */
-export function sliceMesh(
+export function sliceMesh(pos: Float32Array, plan: LayerPlan): Float64Array[] {
+  return runSync(sliceMeshIter(pos, plan));
+}
+
+/** Runs a progress generator to completion. */
+export function runSync<T>(it: Generator<number, T>): T {
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+  }
+}
+
+/** Generator form: yields progress fractions (0..1) every chunk so callers can pause. */
+export function* sliceMeshIter(
   pos: Float32Array,
   plan: LayerPlan,
-  onProgress?: (f: number) => void,
-): Float64Array[] {
+): Generator<number, Float64Array[]> {
   const { n, t, planes } = plan;
   const bufs: FloatBuf[] = [];
   for (let L = 0; L < n; L++) bufs.push(new FloatBuf(256));
   const triCount = pos.length / 9;
-  const step = Math.max(1, Math.floor(triCount / 20));
+  const CHUNK = 20000;
 
   for (let i = 0; i < triCount; i++) {
-    if (onProgress && i % step === 0) onProgress(i / triCount);
+    if (i > 0 && i % CHUNK === 0) yield i / triCount;
     const b = i * 9;
-    const x0 = pos[b], y0 = pos[b + 1], z0 = pos[b + 2];
-    const x1 = pos[b + 3], y1 = pos[b + 4], z1 = pos[b + 5];
-    const x2 = pos[b + 6], y2 = pos[b + 7], z2 = pos[b + 8];
+    const x0 = pos[b],
+      y0 = pos[b + 1],
+      z0 = pos[b + 2];
+    const x1 = pos[b + 3],
+      y1 = pos[b + 4],
+      z1 = pos[b + 5];
+    const x2 = pos[b + 6],
+      y2 = pos[b + 7],
+      z2 = pos[b + 8];
     const zmin = Math.min(z0, z1, z2);
     const zmax = Math.max(z0, z1, z2);
     if (zmin === zmax) continue; // flat triangle: never crosses (consistent >= rule)
@@ -100,27 +136,49 @@ export function sliceMesh(
     for (let L = lo; L <= hi; L++) {
       const h = planes[L];
       if (h < zmin || h > zmax) continue;
-      const a0 = z0 >= h, a1 = z1 >= h, a2 = z2 >= h;
+      const a0 = z0 >= h,
+        a1 = z1 >= h,
+        a2 = z2 >= h;
       if (a0 === a1 && a1 === a2) continue;
       // Find the edge crossing upward (below -> above) and downward (above -> below)
       // in winding order 0->1->2->0. Segment runs from the downward to the upward crossing.
-      let ux = 0, uy = 0, dx = 0, dy = 0;
+      let ux = 0,
+        uy = 0,
+        dx = 0,
+        dy = 0;
       if (a0 !== a1) {
         edgePoint(x0, y0, z0, x1, y1, z1, h);
-        if (a1) { ux = P[0]; uy = P[1]; } else { dx = P[0]; dy = P[1]; }
+        if (a1) {
+          ux = P[0];
+          uy = P[1];
+        } else {
+          dx = P[0];
+          dy = P[1];
+        }
       }
       if (a1 !== a2) {
         edgePoint(x1, y1, z1, x2, y2, z2, h);
-        if (a2) { ux = P[0]; uy = P[1]; } else { dx = P[0]; dy = P[1]; }
+        if (a2) {
+          ux = P[0];
+          uy = P[1];
+        } else {
+          dx = P[0];
+          dy = P[1];
+        }
       }
       if (a2 !== a0) {
         edgePoint(x2, y2, z2, x0, y0, z0, h);
-        if (a0) { ux = P[0]; uy = P[1]; } else { dx = P[0]; dy = P[1]; }
+        if (a0) {
+          ux = P[0];
+          uy = P[1];
+        } else {
+          dx = P[0];
+          dy = P[1];
+        }
       }
       if (ux === dx && uy === dy) continue; // degenerate (touches plane at a vertex)
       bufs[L].push4(dx, dy, ux, uy);
     }
   }
-  onProgress?.(1);
   return bufs.map((b) => b.view().slice());
 }

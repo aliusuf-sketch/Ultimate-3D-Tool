@@ -13,8 +13,14 @@ export function pinPositions(footW: number, footD: number, s: ExtrasSettings): P
   if (s.pinMode === 'one') return [{ x: cx, y: cy, r }];
   const h = s.pinSpacing / 2;
   return footW >= footD
-    ? [{ x: cx - h, y: cy, r }, { x: cx + h, y: cy, r }]
-    : [{ x: cx, y: cy - h, r }, { x: cx, y: cy + h, r }];
+    ? [
+        { x: cx - h, y: cy, r },
+        { x: cx + h, y: cy, r },
+      ]
+    : [
+        { x: cx, y: cy - h, r },
+        { x: cx, y: cy + h, r },
+      ];
 }
 
 export function layerName(i: number): string {

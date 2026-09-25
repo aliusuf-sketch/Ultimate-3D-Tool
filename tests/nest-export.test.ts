@@ -21,21 +21,33 @@ function rectPart(w: number, h: number, layer = 0): Part {
 describe('nesting', () => {
   it('never overlaps parts and respects the margins', () => {
     let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const parts = Array.from({ length: 60 }, (_, i) => rectPart(20 + rnd() * 300, 20 + rnd() * 250, i));
-    const W = 1200, H = 600, gap = 6;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const parts = Array.from({ length: 60 }, (_, i) =>
+      rectPart(20 + rnd() * 300, 20 + rnd() * 250, i),
+    );
+    const W = 1200,
+      H = 600,
+      gap = 6;
     const res = nestParts(parts, W, H, gap);
     expect(res.placements).toHaveLength(parts.length);
     const rects = res.placements.map((pl) => {
       const part = parts[pl.part];
       const tf = placeTransform(part, pl);
-      const xs: number[] = [], ys: number[] = [];
+      const xs: number[] = [],
+        ys: number[] = [];
       const pts = part.loops[0];
       for (let i = 0; i < pts.length; i += 2) {
         const [x, y] = tf(pts[i], pts[i + 1]);
-        xs.push(x); ys.push(y);
+        xs.push(x);
+        ys.push(y);
       }
-      return { s: pl.sheet, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+      return {
+        s: pl.sheet,
+        x0: Math.min(...xs),
+        y0: Math.min(...ys),
+        x1: Math.max(...xs),
+        y1: Math.max(...ys),
+      };
     });
     for (const r of rects) {
       expect(r.x0).toBeGreaterThanOrEqual(gap - 1e-9);
@@ -45,11 +57,14 @@ describe('nesting', () => {
     }
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
-        const a = rects[i], b = rects[j];
+        const a = rects[i],
+          b = rects[j];
         if (a.s !== b.s) continue;
         const sep =
-          a.x1 + gap <= b.x0 + 1e-9 || b.x1 + gap <= a.x0 + 1e-9 ||
-          a.y1 + gap <= b.y0 + 1e-9 || b.y1 + gap <= a.y0 + 1e-9;
+          a.x1 + gap <= b.x0 + 1e-9 ||
+          b.x1 + gap <= a.x0 + 1e-9 ||
+          a.y1 + gap <= b.y0 + 1e-9 ||
+          b.y1 + gap <= a.y0 + 1e-9;
         expect(sep).toBe(true);
       }
     }
@@ -79,8 +94,16 @@ describe('nesting', () => {
 });
 
 const extrasSettings: ExtrasSettings = {
-  pinMode: 'two', pinDiameter: 6, pinSpacing: 40, pinOffsetX: 0, pinOffsetY: 0,
-  labels: true, labelHeight: 6, sheetW: 1200, sheetH: 600, gap: 6,
+  pinMode: 'two',
+  pinDiameter: 6,
+  pinSpacing: 40,
+  pinOffsetX: 0,
+  pinOffsetY: 0,
+  labels: true,
+  labelHeight: 6,
+  sheetW: 1200,
+  sheetH: 600,
+  gap: 6,
 };
 
 describe('pins and labels on a torus', () => {
@@ -104,7 +127,8 @@ describe('pins and labels on a torus', () => {
 
 describe('writers', () => {
   const d = {
-    width: 100, height: 50,
+    width: 100,
+    height: 50,
     cuts: [Float64Array.from([5, 5, 95, 5, 95, 45, 5, 45])],
     circles: [{ x: 20, y: 25, r: 3 }],
     texts: [{ text: 'L01', x: 50, y: 25, h: 6 }],

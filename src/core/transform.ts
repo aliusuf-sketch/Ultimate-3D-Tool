@@ -28,10 +28,21 @@ export function transformMesh(
   const src = mesh.positions;
   const out = new Float32Array(src.length);
   for (let i = 0; i < src.length; i += 3) {
-    const x = src[i], y = src[i + 1], z = src[i + 2];
-    let a = x, b = y, c = z;
-    if (axis === 'y') { a = x; b = -z; c = y; }
-    else if (axis === 'x') { a = -z; b = y; c = x; }
+    const x = src[i],
+      y = src[i + 1],
+      z = src[i + 2];
+    let a = x,
+      b = y,
+      c = z;
+    if (axis === 'y') {
+      a = x;
+      b = -z;
+      c = y;
+    } else if (axis === 'x') {
+      a = -z;
+      b = y;
+      c = x;
+    }
     out[i] = a * scale;
     out[i + 1] = b * scale;
     out[i + 2] = c * scale;

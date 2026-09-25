@@ -82,7 +82,13 @@ export function nestParts(parts: Part[], sheetW: number, sheetH: number, gap: nu
       sheetUsedH[sheet] += it.h + gap;
       shelves.push(shelf);
     }
-    placements.push({ part: it.i, sheet: shelf.sheet, rotated: it.rotated, x: shelf.x, y: shelf.y });
+    placements.push({
+      part: it.i,
+      sheet: shelf.sheet,
+      rotated: it.rotated,
+      x: shelf.x,
+      y: shelf.y,
+    });
     shelf.x += it.w + gap;
   }
 
@@ -99,7 +105,10 @@ export function nestParts(parts: Part[], sheetW: number, sheetH: number, gap: nu
 }
 
 /** Maps a part-space point to sheet space for a placement. */
-export function placeTransform(part: Part, pl: Placement): (x: number, y: number) => [number, number] {
+export function placeTransform(
+  part: Part,
+  pl: Placement,
+): (x: number, y: number) => [number, number] {
   const [bx0, by0, , by1] = part.bbox;
   if (pl.rotated) {
     // (x, y) -> (-y, x); rotated bbox min = (-by1, bx0)

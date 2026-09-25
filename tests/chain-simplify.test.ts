@@ -7,10 +7,22 @@ describe('chaining', () => {
   it('handles reversed segment orientation', () => {
     // Square with two segments reversed and shuffled order.
     const segs = Float64Array.from([
-      0, 0, 1, 0,
-      0, 1, 1, 1, // reversed (should be 1,1 -> 0,1)
-      1, 0, 1, 1,
-      0, 0, 0, 1, // reversed (should be 0,1 -> 0,0)
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      1, // reversed (should be 1,1 -> 0,1)
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1, // reversed (should be 0,1 -> 0,0)
     ]);
     const { loops, open } = chainSegments(segs);
     expect(open).toHaveLength(0);

@@ -1,7 +1,12 @@
 /** Assemble export files (per-layer + nested sheets) and zip them. */
 import JSZip from 'jszip';
 import type {
-  Drawing, ExportOptions, LayerExtras, NestResult, Part, SlicedLayer,
+  Drawing,
+  ExportOptions,
+  LayerExtras,
+  NestResult,
+  Part,
+  SlicedLayer,
 } from '../../types';
 import { layerName } from '../extras';
 import { placeTransform } from '../nest';
@@ -33,7 +38,10 @@ export function layerDrawing(input: ExportInput, i: number): Drawing {
   const ex = input.extras[i];
   const shift = (pts: Float64Array) => {
     const o = new Float64Array(pts.length);
-    for (let k = 0; k < pts.length; k += 2) { o[k] = pts[k] + m; o[k + 1] = pts[k + 1] + m; }
+    for (let k = 0; k < pts.length; k += 2) {
+      o[k] = pts[k] + m;
+      o[k + 1] = pts[k + 1] + m;
+    }
     return o;
   };
   return {
@@ -104,7 +112,10 @@ export function readmeText(input: ExportInput): string {
   ].join('\n');
 }
 
-export function buildExportFiles(input: ExportInput, opts: ExportOptions): { path: string; data: string }[] {
+export function buildExportFiles(
+  input: ExportInput,
+  opts: ExportOptions,
+): { path: string; data: string }[] {
   const files: { path: string; data: string }[] = [];
   if (opts.perLayer) {
     input.layers.forEach((layer, i) => {

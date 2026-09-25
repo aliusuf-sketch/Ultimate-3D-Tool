@@ -26,7 +26,8 @@ export function chainSegments(segs: Float64Array): ChainResult {
   const numeric = maxAbs * Q < NUM_KEY_LIMIT - 1;
   const keyOf = numeric
     ? (x: number, y: number): number | string =>
-        (Math.round(x * Q) + NUM_KEY_LIMIT) * (2 * NUM_KEY_LIMIT) + (Math.round(y * Q) + NUM_KEY_LIMIT)
+        (Math.round(x * Q) + NUM_KEY_LIMIT) * (2 * NUM_KEY_LIMIT) +
+        (Math.round(y * Q) + NUM_KEY_LIMIT)
     : (x: number, y: number): number | string => `${Math.round(x * Q)},${Math.round(y * Q)}`;
 
   // key -> list of incidences (seg * 2 + end)
@@ -70,7 +71,10 @@ export function chainSegments(segs: Float64Array): ChainResult {
     let closed = false;
     // Walk forward.
     for (;;) {
-      if (cur === startKey) { closed = true; break; }
+      if (cur === startKey) {
+        closed = true;
+        break;
+      }
       const inc = take(cur);
       if (inc < 0) break;
       const s = inc >> 1;

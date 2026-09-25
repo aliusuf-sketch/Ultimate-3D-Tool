@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Slice STL models into foam-sheet layers and export DXF/SVG cut patterns. Runs entirely in your browser."
+    />
+    <meta name="theme-color" content="#2c5f4a" />
+    <title>Foam Slicer</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="4" y="21" width="24" height="5" rx="1" />
+            <rect x="6" y="14.5" width="20" height="5" rx="1" />
+            <rect x="9" y="8" width="14" height="5" rx="1" />
+          </svg>
+          <h1>Foam Slicer</h1>
+        </div>
+        <div class="file-info" id="fileInfo" aria-live="polite">No model loaded</div>
+        <div class="top-actions">
+          <label class="btn btn-primary" for="fileInput">
+            Open STL
+            <input
+              id="fileInput"
+              type="file"
+              accept=".stl,model/stl,application/sla"
+              class="visually-hidden"
+            />
+          </label>
+          <button class="btn" id="sampleBtn" type="button">Load sample</button>
+          <button
+            class="btn btn-icon"
+            id="themeBtn"
+            type="button"
+            aria-label="Toggle colour theme"
+            title="Toggle colour theme"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="viewer" aria-label="Model view">
+          <div class="view-tabs" role="tablist" aria-label="View">
+            <button role="tab" id="tab3d" aria-selected="true" aria-controls="viewport">
+              Stack
+            </button>
+            <button role="tab" id="tab2d" aria-selected="false" aria-controls="viewport">
+              Layer pattern
+            </button>
+          </div>
+          <div class="viewport" id="viewport">
+            <canvas id="canvas3d" aria-label="3D stack preview"></canvas>
+            <canvas id="canvas2d" aria-label="Layer cut pattern" hidden></canvas>
+            <div class="empty" id="emptyState">
+              <p class="empty-title">Drop an STL file here</p>
+              <p class="empty-sub">
+                Binary or ASCII, units in mm. Nothing is uploaded — everything runs in your browser.
+              </p>
+              <div class="empty-actions">
+                <label class="btn btn-primary" for="fileInput">Choose file</label>
+                <button class="btn" type="button" id="sampleBtn2">Load sample torus</button>
+              </div>
+            </div>
+            <div class="drop-hint" id="dropHint" hidden>Drop to load</div>
+            <div class="progress" id="progress" hidden role="status">
+              <div class="progress-label" id="progressLabel">Working…</div>
+              <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+            </div>
+            <div class="legend" id="legend2d" hidden>
+              <span><i class="sw sw-cut"></i>Cut</span>
+              <span><i class="sw sw-below"></i>Layer below</span>
+              <span><i class="sw sw-pin"></i>Pin</span>
+              <span><i class="sw sw-open"></i>Open contour</span>
+            </div>
+          </div>
+
+          <div class="scrubber">
+            <div class="readout" id="layerReadout" aria-live="polite">—</div>
+            <input
+              type="range"
+              id="layerSlider"
+              min="0"
+              max="0"
+              value="0"
+              step="1"
+              disabled
+              aria-label="Selected layer"
+            />
+          </div>
+          <p class="stats" id="stats">Load a model to begin.</p>
+        </section>
+
+        <aside class="panel" aria-label="Settings">
+          <form id="settings" autocomplete="off" novalidate>
+            <fieldset>
+              <legend>Model</legend>
+              <div class="field">
+                <span class="label" id="axisLabel">Stack direction</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="axisLabel">
+                  <label><input type="radio" name="axis" value="z" checked /><span>Z</span></label>
+                  <label><input type="radio" name="axis" value="y" /><span>Y</span></label>
+                  <label><input type="radio" name="axis" value="x" /><span>X</span></label>
+                </div>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Scale %</span>
+                  <input
+                    type="number"
+                    name="scale"
+                    value="100"
+                    min="0.1"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Stack height (mm)</span>
+                  <input type="number" name="stackHeight" min="0.1" step="any" inputmode="decimal"
+                /></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Layers</legend>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Sheet thickness (mm)</span>
+                  <input
+                    type="number"
+                    name="thickness"
+                    value="10"
+                    min="0.5"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Simplify tolerance (mm)</span>
+                  <input
+                    type="number"
+                    name="tolerance"
+                    value="0.05"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                /></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Alignment pins</legend>
+              <label class="field"
+                ><span class="label">Pins</span>
+                <select name="pinMode">
+                  <option value="none">None</option>
+                  <option value="one">1 centre pin</option>
+                  <option value="two" selected>2 pins</option>
+                </select></label
+              >
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Diameter (mm)</span>
+                  <input
+                    type="number"
+                    name="pinDiameter"
+                    value="6"
+                    min="0.5"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Spacing (mm)</span>
+                  <input
+                    type="number"
+                    name="pinSpacing"
+                    value="40"
+                    min="0"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <div class="row">
+                <label class="field"
+                  ><span class="label">Offset X (mm)</span>
+                  <input type="number" name="pinOffsetX" value="0" step="any" inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Offset Y (mm)</span>
+                  <input type="number" name="pinOffsetY" value="0" step="any" inputmode="decimal"
+                /></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Labels</legend>
+              <label class="check"
+                ><input type="checkbox" name="labels" checked /> Engrave layer numbers (L01,
+                L02…)</label
+              >
+              <label class="field"
+                ><span class="label">Text height (mm)</span>
+                <input
+                  type="number"
+                  name="labelHeight"
+                  value="6"
+                  min="1"
+                  step="any"
+                  inputmode="decimal"
+              /></label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Sheet nesting</legend>
+              <div class="row row-3">
+                <label class="field"
+                  ><span class="label">Width (mm)</span>
+                  <input
+                    type="number"
+                    name="sheetW"
+                    value="1200"
+                    min="10"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Height (mm)</span>
+                  <input
+                    type="number"
+                    name="sheetH"
+                    value="600"
+                    min="10"
+                    step="any"
+                    inputmode="decimal"
+                /></label>
+                <label class="field"
+                  ><span class="label">Gap (mm)</span>
+                  <input type="number" name="gap" value="6" min="0" step="any" inputmode="decimal"
+                /></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Export</legend>
+              <div class="checks">
+                <label class="check"><input type="checkbox" name="fmtDxf" checked /> DXF</label>
+                <label class="check"><input type="checkbox" name="fmtSvg" checked /> SVG</label>
+                <label class="check"
+                  ><input type="checkbox" name="outLayers" checked /> One file per layer</label
+                >
+                <label class="check"
+                  ><input type="checkbox" name="outSheets" checked /> Nested sheets</label
+                >
+              </div>
+              <button class="btn btn-primary btn-block" type="button" id="exportBtn" disabled>
+                Download ZIP
+              </button>
+              <button class="btn btn-block" type="button" id="layerSvgBtn" disabled>
+                Download this layer as SVG
+              </button>
+            </fieldset>
+          </form>
+          <p class="footnote">All processing happens locally in your browser.</p>
+        </aside>
+      </main>
+      <div class="toasts" id="toasts" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -50,12 +50,22 @@ export function toBinarySTL(mesh: Mesh): ArrayBuffer {
   const p = mesh.positions;
   for (let i = 0; i < mesh.triCount; i++) {
     const b = i * 9;
-    const ux = p[b + 3] - p[b], uy = p[b + 4] - p[b + 1], uz = p[b + 5] - p[b + 2];
-    const vx = p[b + 6] - p[b], vy = p[b + 7] - p[b + 1], vz = p[b + 8] - p[b + 2];
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const ux = p[b + 3] - p[b],
+      uy = p[b + 4] - p[b + 1],
+      uz = p[b + 5] - p[b + 2];
+    const vx = p[b + 6] - p[b],
+      vy = p[b + 7] - p[b + 1],
+      vz = p[b + 8] - p[b + 2];
+    let nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx;
     const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l; ny /= l; nz /= l;
-    dv.setFloat32(o, nx, true); dv.setFloat32(o + 4, ny, true); dv.setFloat32(o + 8, nz, true);
+    nx /= l;
+    ny /= l;
+    nz /= l;
+    dv.setFloat32(o, nx, true);
+    dv.setFloat32(o + 4, ny, true);
+    dv.setFloat32(o + 8, nz, true);
     o += 12;
     for (let k = 0; k < 9; k++, o += 4) dv.setFloat32(o, p[b + k], true);
     o += 2;

@@ -11,9 +11,13 @@ export function signedArea(pts: Float64Array): number {
 }
 
 export function loopBBox(pts: Float64Array): [number, number, number, number] {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
   for (let i = 0; i < pts.length; i += 2) {
-    const x = pts[i], y = pts[i + 1];
+    const x = pts[i],
+      y = pts[i + 1];
     if (x < x0) x0 = x;
     if (x > x1) x1 = x;
     if (y < y0) y0 = y;
@@ -27,8 +31,10 @@ export function pointInPolygon(x: number, y: number, pts: Float64Array): boolean
   const n = pts.length / 2;
   let inside = false;
   for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = pts[i * 2], yi = pts[i * 2 + 1];
-    const xj = pts[j * 2], yj = pts[j * 2 + 1];
+    const xi = pts[i * 2],
+      yi = pts[i * 2 + 1];
+    const xj = pts[j * 2],
+      yj = pts[j * 2 + 1];
     if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
@@ -51,12 +57,15 @@ export function edgeDistance(x: number, y: number, loops: { pts: Float64Array }[
   for (const { pts } of loops) {
     const n = pts.length / 2;
     for (let i = 0, j = n - 1; i < n; j = i++) {
-      const ax = pts[j * 2], ay = pts[j * 2 + 1];
-      const dx = pts[i * 2] - ax, dy = pts[i * 2 + 1] - ay;
+      const ax = pts[j * 2],
+        ay = pts[j * 2 + 1];
+      const dx = pts[i * 2] - ax,
+        dy = pts[i * 2 + 1] - ay;
       const l2 = dx * dx + dy * dy;
       let t = l2 > 0 ? ((x - ax) * dx + (y - ay) * dy) / l2 : 0;
       t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const ex = ax + t * dx - x, ey = ay + t * dy - y;
+      const ex = ax + t * dx - x,
+        ey = ay + t * dy - y;
       const d = ex * ex + ey * ey;
       if (d < best) best = d;
     }
@@ -81,8 +90,10 @@ export function buildTopology(raw: Float64Array[]): SlicedLoop[] {
   loops.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
   for (let i = 0; i < loops.length; i++) {
     const li = loops[i];
-    const x = li.pts[0], y = li.pts[1];
-    let depth = 0, parent = -1;
+    const x = li.pts[0],
+      y = li.pts[1];
+    let depth = 0,
+      parent = -1;
     for (let j = 0; j < i; j++) {
       const lj = loops[j];
       if (inBBox(x, y, lj.bbox) && pointInPolygon(x, y, lj.pts)) {
